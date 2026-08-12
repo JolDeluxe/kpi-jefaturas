@@ -1,0 +1,24 @@
+{
+  "name": "kpi-jefaturas",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend",
+    "sync-agent"
+  ],
+  "scripts": {
+    "dev": "concurrently -n backend,frontend,sync -c blue,green,magenta \"npm run dev -w backend\" \"npm run dev -w frontend\" \"npm run dev -w sync-agent\"",
+    "build": "npm run build -w frontend && npm run build -w backend && npm run build -w sync-agent",
+    "start": "npm run start -w backend",
+    "db:up": "node -e \"console.log('SQLite no requiere servidor ni Docker. Base local: backend/prisma/dev.db')\"",
+    "db:migrate": "npm run prisma:migrate -w backend",
+    "db:seed": "npm run prisma:seed -w backend",
+    "import:csv": "npm run import:csv -w backend --",
+    "setup": "npm install && npm run db:migrate && npm run db:seed && npm run import:csv",
+    "test": "npm run test -w backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}

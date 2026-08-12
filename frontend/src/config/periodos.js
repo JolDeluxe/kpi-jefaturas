@@ -1,0 +1,21 @@
+export const PERIODOS = [
+  { id: 1, label: 'ENE' },
+  { id: 2, label: 'FEB' },
+  { id: 3, label: 'MZO' },
+  { id: 4, label: 'ABR' },
+  { id: 5, label: 'MAY' },
+  { id: 6, label: 'JUN' },
+  { id: 7, label: 'JUL' },
+  { id: 8, label: 'AGO' },
+  { id: 9, label: 'SEP' },
+  { id: 10, label: 'OCT' },
+  { id: 11, label: 'NOV' },
+  { id: 12, label: 'DIC' },
+  { id: 19, label: 'ACUMULADO' },
+  { id: 13, label: 'Q1' },
+  { id: 14, label: 'Q2' },
+  { id: 15, label: 'Q3' },
+  { id: 16, label: 'Q4' },
+  { id: 17, label: 'S1' },
+  { id: 18, label: 'S2' }
+];
