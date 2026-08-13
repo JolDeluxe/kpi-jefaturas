@@ -11,6 +11,8 @@ model Importacion {
   id           String         @id @default(cuid())
   filename     String
   sha256       String
+  source       String         @default("manual")
+  sourceVersion String?
   createdAt    DateTime       @default(now())
   importedAt   DateTime?
   status       String
@@ -19,6 +21,25 @@ model Importacion {
   resultados   KpiResultado[]
 
   @@index([sha256, status])
+  @@index([source, sourceVersion])
+}
+
+model KpiSyncState {
+  id                 String    @id
+  source             String
+  enabled            Boolean   @default(false)
+  status             String    @default("IDLE")
+  lastCheckedAt      DateTime?
+  lastDetectedAt     DateTime?
+  lastDetectedETag   String?
+  lastImportedAt     DateTime?
+  lastImportedETag   String?
+  lastImportacionId  String?
+  lastFilename       String?
+  lastSha256         String?
+  lastRowCount       Int?
+  lastError          String?
+  updatedAt          DateTime  @updatedAt
 }
 
 model Cargo {

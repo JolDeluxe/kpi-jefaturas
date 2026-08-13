@@ -1,0 +1,23 @@
+.git
+.env
+node_modules
+dist
+coverage
+*.log
+data
+uploads
+.sync-state.json
+
+frontend/dist
+backend/dist
+sync-agent/dist
+
+backend/prisma/dev.db
+backend/prisma/dev.db-journal
+backend/prisma/*.db
+backend/prisma/*.db-journal
+backend/prisma/*.db-wal
+backend/prisma/*.db-shm
+
+048 KPIs Jefaturas 260807 122334.csv
+*.csv

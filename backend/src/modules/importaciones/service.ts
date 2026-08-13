@@ -7,8 +7,8 @@ import { hashBufferSha256, hashFileSha256 } from "../../utils/hash-file.js";
 import { audit } from "../../utils/audit-log.js";
 
 export type ImportCsvInput =
-  | { type: "file"; filePath: string; filename?: string }
-  | { type: "buffer"; buffer: Buffer; filename: string };
+  | { type: "file"; filePath: string; filename?: string; source?: string; sourceVersion?: string | null }
+  | { type: "buffer"; buffer: Buffer; filename: string; source?: string; sourceVersion?: string | null };
 
 const rowToResultData = (row: ParsedKpiRow, importacionId: string) => ({
   importacionId,
@@ -40,25 +40,42 @@ const uniqueBy = <T, K>(items: T[], getKey: (item: T) => K) => {
   return Array.from(map.values());
 };
 
+const getCargoDepth = (cargoId: number) => {
+  let depth = 0;
+  let parentId = getKnownParentId(cargoId);
+  while (parentId !== null) {
+    depth += 1;
+    parentId = getKnownParentId(parentId);
+  }
+  return depth;
+};
+
 export const importKpiCsv = async (input: ImportCsvInput, client: PrismaClient = prisma) => {
   const filename = input.type === "file" ? input.filename || path.basename(input.filePath) : input.filename;
+  const source = input.source || "manual";
+  const sourceVersion = input.sourceVersion || null;
   const sha256 = input.type === "file" ? await hashFileSha256(input.filePath) : hashBufferSha256(input.buffer);
 
   const previous = await client.importacion.findFirst({ where: { sha256, status: "SUCCESS" } });
   if (previous) {
     const skipped = await client.importacion.create({
-      data: { filename, sha256, status: "SKIPPED_DUPLICATE", rowCount: 0, importedAt: new Date(), errorMessage: `Archivo ya importado en ${previous.id}` }
+      data: { filename, sha256, source, sourceVersion, status: "SKIPPED_DUPLICATE", rowCount: 0, importedAt: new Date(), errorMessage: `Archivo ya importado en ${previous.id}` }
     });
     return { importacion: skipped, duplicated: true, rowCount: 0 };
   }
 
-  const importacion = await client.importacion.create({ data: { filename, sha256, status: "PROCESSING" } });
+  const importacion = await client.importacion.create({ data: { filename, sha256, source, sourceVersion, status: "PROCESSING" } });
 
   try {
     const rows = input.type === "file" ? await parseKpiCsvFile(input.filePath) : parseKpiCsvContent(input.buffer.toString("utf8"));
 
     await client.$transaction(async (tx) => {
-      for (const cargo of uniqueBy(rows, (row) => row.cargoId)) {
+      const cargos = uniqueBy(rows, (row) => row.cargoId).sort((a, b) => {
+        const depthDiff = getCargoDepth(a.cargoId) - getCargoDepth(b.cargoId);
+        return depthDiff || a.cargoId - b.cargoId;
+      });
+
+      for (const cargo of cargos) {
         await tx.cargo.upsert({
           where: { id: cargo.cargoId },
           update: { nombre: cargo.cargoNombre, parentId: getKnownParentId(cargo.cargoId), activo: true },
@@ -74,13 +91,11 @@ export const importKpiCsv = async (input: ImportCsvInput, client: PrismaClient =
         });
       }
 
+      await tx.kpiResultado.deleteMany();
+
       for (const row of rows) {
         const data = rowToResultData(row, importacion.id);
-        await tx.kpiResultado.upsert({
-          where: { anio_periodo_cargoId_kpiId: { anio: row.anio, periodo: row.periodo, cargoId: row.cargoId, kpiId: row.kpiId } },
-          update: data,
-          create: data
-        });
+        await tx.kpiResultado.create({ data });
       }
 
       await tx.importacion.update({

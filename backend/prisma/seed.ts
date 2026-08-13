@@ -5,6 +5,14 @@ import type { Role } from "../src/utils/cargo-scope.js";
 
 const prisma = new PrismaClient();
 
+const requireSeedEnv = (name: string) => {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`Falta ${name}. Define esta variable para ejecutar el seed; no hay contrasenas default.`);
+  }
+  return value;
+};
+
 const cargos = [
   [1, "MBC"],
   [100, "DIRECCION MBC"],
@@ -29,17 +37,17 @@ const cargos = [
   [402, "JEFATURA DE GESTION DE CALIDAD"]
 ] as const;
 
+const seedAdminPassword = requireSeedEnv("SEED_ADMIN_PASSWORD");
+const seedGerentePassword = requireSeedEnv("SEED_GERENTE_PASSWORD");
+const seedJefePassword = requireSeedEnv("SEED_JEFE_PASSWORD");
+const seedCargoPassword = requireSeedEnv("SEED_CARGO_PASSWORD");
+
 const upsertUser = async (input: { nombre: string; email: string; password: string; role: Role; cargoId: number | null }) => {
-  await prisma.usuario.upsert({
-    where: { email: input.email },
-    update: {
-      nombre: input.nombre,
-      role: input.role,
-      cargoId: input.cargoId,
-      passwordHash: await bcrypt.hash(input.password, 12),
-      activo: true
-    },
-    create: {
+  const existing = await prisma.usuario.findUnique({ where: { email: input.email } });
+  if (existing) return;
+
+  await prisma.usuario.create({
+    data: {
       nombre: input.nombre,
       email: input.email,
       passwordHash: await bcrypt.hash(input.password, 12),
@@ -61,7 +69,7 @@ for (const [id, nombre] of cargos) {
 await upsertUser({
   nombre: "Administrador Desarrollo",
   email: process.env.SEED_ADMIN_EMAIL || "admin@mbc.local",
-  password: process.env.SEED_ADMIN_PASSWORD || "Admin123!",
+  password: seedAdminPassword,
   role: "ADMIN",
   cargoId: null
 });
@@ -69,7 +77,7 @@ await upsertUser({
 await upsertUser({
   nombre: "Gerente Administrativa DEV",
   email: "gerente200@mbc.local",
-  password: process.env.SEED_GERENTE_PASSWORD || "Gerente123!",
+  password: seedGerentePassword,
   role: "GERENTE",
   cargoId: 200
 });
@@ -77,7 +85,7 @@ await upsertUser({
 await upsertUser({
   nombre: "Jefe Contabilidad DEV",
   email: "jefe201@mbc.local",
-  password: process.env.SEED_JEFE_PASSWORD || "Jefe123!",
+  password: seedJefePassword,
   role: "JEFE",
   cargoId: 201
 });
@@ -92,11 +100,11 @@ for (const [id, nombre] of cargos) {
   await upsertUser({
     nombre: `${nombre} DEV`,
     email: `cargo${id}@mbc.local`,
-    password: process.env.SEED_CARGO_PASSWORD || "KpiDev123!",
+    password: seedCargoPassword,
     role: roleForCargo(id),
     cargoId: id
   });
 }
 
-console.log("Seed completo: cargos base, usuarios legacy y usuarios por cargo creados.");
+console.log("Seed completo: cargos base actualizados y usuarios faltantes creados.");
 await prisma.$disconnect();

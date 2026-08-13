@@ -1,8 +1,20 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import dotenv from "dotenv";
 
-const dbPath = path.resolve(process.cwd(), "prisma/dev.db");
+dotenv.config({ path: path.resolve(process.cwd(), "../.env") });
+dotenv.config();
+
+const sqlitePathFromUrl = (databaseUrl?: string) => {
+  if (!databaseUrl?.startsWith("file:")) return null;
+  const filePath = databaseUrl.slice("file:".length);
+  return path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), "prisma", filePath.replace(/^\.\//, ""));
+};
+
+const dbPath = process.env.DATABASE_PATH
+  ? path.resolve(process.env.DATABASE_PATH)
+  : sqlitePathFromUrl(process.env.DATABASE_URL) || path.resolve(process.cwd(), "prisma/dev.db");
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
 const db = new DatabaseSync(dbPath);
@@ -29,6 +41,8 @@ CREATE TABLE IF NOT EXISTS "Importacion" (
   "id" TEXT NOT NULL PRIMARY KEY,
   "filename" TEXT NOT NULL,
   "sha256" TEXT NOT NULL,
+  "source" TEXT NOT NULL DEFAULT 'manual',
+  "sourceVersion" TEXT,
   "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "importedAt" DATETIME,
   "status" TEXT NOT NULL,
@@ -68,6 +82,24 @@ CREATE TABLE IF NOT EXISTS "RefreshSession" (
   "userAgent" TEXT,
   "ip" TEXT,
   CONSTRAINT "RefreshSession_userId_fkey" FOREIGN KEY ("userId") REFERENCES "Usuario" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS "KpiSyncState" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "source" TEXT NOT NULL,
+  "enabled" BOOLEAN NOT NULL DEFAULT false,
+  "status" TEXT NOT NULL DEFAULT 'IDLE',
+  "lastCheckedAt" DATETIME,
+  "lastDetectedAt" DATETIME,
+  "lastDetectedETag" TEXT,
+  "lastImportedAt" DATETIME,
+  "lastImportedETag" TEXT,
+  "lastImportacionId" TEXT,
+  "lastFilename" TEXT,
+  "lastSha256" TEXT,
+  "lastRowCount" INTEGER,
+  "lastError" TEXT,
+  "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS "Kpi" (
@@ -114,6 +146,15 @@ CREATE INDEX IF NOT EXISTS "Importacion_sha256_status_idx" ON "Importacion"("sha
 CREATE UNIQUE INDEX IF NOT EXISTS "KpiResultado_anio_periodo_cargoId_kpiId_key" ON "KpiResultado"("anio", "periodo", "cargoId", "kpiId");
 CREATE INDEX IF NOT EXISTS "KpiResultado_cargoId_anio_periodo_idx" ON "KpiResultado"("cargoId", "anio", "periodo");
 `);
+
+const ensureColumn = (table: string, column: string, definition: string) => {
+  const columns = db.prepare(`PRAGMA table_info('${table}')`).all() as Array<{ name: string }>;
+  if (!columns.some((item) => item.name === column)) db.exec(`ALTER TABLE "${table}" ADD COLUMN ${definition}`);
+};
+
+ensureColumn("Importacion", "source", "\"source\" TEXT NOT NULL DEFAULT 'manual'");
+ensureColumn("Importacion", "sourceVersion", "\"sourceVersion\" TEXT");
+db.exec(`CREATE INDEX IF NOT EXISTS "Importacion_source_sourceVersion_idx" ON "Importacion"("source", "sourceVersion");`);
 
 db.close();
 console.log(`SQLite listo en ${dbPath}`);

@@ -8,8 +8,8 @@ const DESKTOP_MEDIA_QUERY = '(min-width: 1024px)';
 export default function LoginPage() {
   const login = useAuthStore((state) => state.login);
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@mbc.local');
-  const [password, setPassword] = useState('Admin123!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showDesktopVideo, setShowDesktopVideo] = useState(() => window.matchMedia(DESKTOP_MEDIA_QUERY).matches);

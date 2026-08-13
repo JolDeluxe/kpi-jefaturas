@@ -30,6 +30,9 @@ Variables principales:
 - `CHECK_INTERVAL_MS`
 - `SEED_ADMIN_EMAIL`
 - `SEED_ADMIN_PASSWORD`
+- `SEED_GERENTE_PASSWORD`
+- `SEED_JEFE_PASSWORD`
+- `SEED_CARGO_PASSWORD`
 
 ## Base de Datos Local
 
@@ -144,10 +147,12 @@ Scope de ejemplo:
 
 Usuarios DEV creados por seed:
 
-- `admin@mbc.local` / `Admin123!`
-- `gerente200@mbc.local` / `Gerente123!`
-- `jefe201@mbc.local` / `Jefe123!`
-- Un usuario por cada cargo con patron `cargo<ID>@mbc.local` / `KpiDev123!`.
+- `admin@mbc.local`, usando `SEED_ADMIN_PASSWORD`.
+- `gerente200@mbc.local`, usando `SEED_GERENTE_PASSWORD`.
+- `jefe201@mbc.local`, usando `SEED_JEFE_PASSWORD`.
+- Un usuario por cada cargo con patron `cargo<ID>@mbc.local`, usando `SEED_CARGO_PASSWORD`.
+
+El seed no tiene contrasenas default. Si faltan variables de contrasena, falla antes de crear usuarios.
 
 Ejemplos utiles:
 

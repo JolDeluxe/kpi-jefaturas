@@ -1,0 +1,27 @@
+services:
+  kpi-jefaturas:
+    build: .
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: file:/data/kpi.db
+      JWT_SECRET: ${JWT_SECRET:-}
+      COOKIE_NAME: kpi_access
+      REFRESH_COOKIE_NAME: kpi_refresh
+      SYNC_API_KEY: ${SYNC_API_KEY:-}
+      KPI_SOURCE: local
+      KPI_LOCAL_FILE_PATH: /app/local-csv/kpis.csv
+      KPI_SYNC_INTERVAL_MS: 1800000
+      KPI_SYNC_STABILITY_DELAY_MS: 5000
+      KPI_SYNC_STARTUP: "true"
+      BOOTSTRAP_SEED: ${BOOTSTRAP_SEED:-false}
+      SEED_ADMIN_EMAIL: admin@mbc.local
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      SEED_GERENTE_PASSWORD: ${SEED_GERENTE_PASSWORD:-}
+      SEED_JEFE_PASSWORD: ${SEED_JEFE_PASSWORD:-}
+      SEED_CARGO_PASSWORD: ${SEED_CARGO_PASSWORD:-}
+    volumes:
+      - ./data:/data
+      - ./048 KPIs Jefaturas 260807 122334.csv:/app/local-csv/kpis.csv:ro

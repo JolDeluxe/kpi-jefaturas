@@ -9,5 +9,10 @@ backend/dist/
 sync-agent/dist/
 uploads/
 .sync-state.json
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
 backend/prisma/dev.db
 backend/prisma/dev.db-journal

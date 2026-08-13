@@ -10,9 +10,11 @@ import authRoutes from "./routes/auth_rutas.js";
 import cargosRoutes from "./routes/cargos_rutas.js";
 import dashboardRoutes from "./routes/dashboard_rutas.js";
 import importacionesRoutes from "./routes/importaciones_rutas.js";
+import kpiSyncRoutes from "./routes/kpi_sync_rutas.js";
 import kpisRoutes from "./routes/kpis_rutas.js";
 import syncRoutes from "./routes/sync_rutas.js";
 import usuariosRoutes from "./routes/usuarios_rutas.js";
+import { startKpiSyncScheduler, stopKpiSyncScheduler } from "./modules/kpi-sync/service.js";
 import { logger } from "./utils/logger.js";
 
 const app = express();
@@ -27,12 +29,13 @@ app.use((req, res, next) => {
 app.use(cookieParser());
 app.use(express.json({ limit: "2mb" }));
 
-app.get("/api/health", (_req, res) => res.json({ ok: true, service: "kpi-jefaturas" }));
+app.get("/api/health", (_req, res) => res.json({ status: "ok", service: "kpi-jefaturas" }));
 app.use("/api/auth", authRoutes);
 app.use("/api/cargos", cargosRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/kpis", kpisRoutes);
 app.use("/api/importaciones", importacionesRoutes);
+app.use("/api/admin/kpi-sync", kpiSyncRoutes);
 app.use("/api/sync", syncRoutes);
 app.use("/api/usuarios", usuariosRoutes);
 
@@ -52,19 +55,28 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
 
 let server: ReturnType<typeof app.listen> | null = null;
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+export const startServer = () => {
+  if (server) return server;
   server = app.listen(env.PORT, "0.0.0.0", () => {
     logger.info(`KPI Jefaturas listo en http://localhost:${env.PORT} (${env.NODE_ENV})`);
     if (!isProduction) logger.info("Frontend dev esperado en http://localhost:5173 con proxy /api");
+    startKpiSyncScheduler();
   });
+  return server;
+};
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  startServer();
 }
 
 const shutdown = async () => {
   if (!server) {
+    stopKpiSyncScheduler();
     await prisma.$disconnect();
     process.exit(0);
   }
   server.close(async () => {
+    stopKpiSyncScheduler();
     await prisma.$disconnect();
     process.exit(0);
   });
