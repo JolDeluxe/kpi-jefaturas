@@ -54,17 +54,34 @@ model Cargo {
 }
 
 model Usuario {
+  id                    String   @id @default(cuid())
+  nombre                String
+  email                 String   @unique
+  username              String?  @unique
+  passwordHash          String
+  passwordEncrypted     String?
+  role                  String
+  cargoId               Int?
+  cargo                 Cargo?   @relation(fields: [cargoId], references: [id])
+  activo                Boolean  @default(true)
+  autoProvisioned       Boolean  @default(false)
+  lastPasswordChangedAt DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  sessions              RefreshSession[]
+}
+
+model AuditLog {
   id           String   @id @default(cuid())
-  nombre       String
-  email        String   @unique
-  passwordHash String
-  role         String
-  cargoId      Int?
-  cargo        Cargo?   @relation(fields: [cargoId], references: [id])
-  activo       Boolean  @default(true)
+  actorUserId  String?
+  targetUserId String?
+  event        String
+  metadata     String?
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  sessions     RefreshSession[]
+
+  @@index([event, createdAt])
+  @@index([actorUserId])
+  @@index([targetUserId])
 }
 
 model RefreshSession {

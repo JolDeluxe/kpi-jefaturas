@@ -4,6 +4,7 @@ import { env, isProduction } from "../env.js";
 import { authenticate, signAccessToken } from "../middlewares/authenticate.js";
 import {
   createRefreshSession,
+  changeOwnPassword,
   getMe,
   loginUser,
   revokeAllRefreshSessions,
@@ -13,7 +14,8 @@ import {
 import { audit } from "../utils/audit-log.js";
 
 const router = Router();
-const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
+const loginSchema = z.object({ username: z.string().min(1), password: z.string().min(1) });
+const changePasswordSchema = z.object({ currentPassword: z.string().min(1), newPassword: z.string().min(1) });
 const ACCESS_MAX_AGE_MS = 8 * 60 * 60 * 1000;
 const REFRESH_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
@@ -44,7 +46,7 @@ const clearAuthCookies = (res: import("express").Response) => {
 };
 
 const loginRateLimit = (req: import("express").Request, res: import("express").Response, next: import("express").NextFunction) => {
-  const key = `${req.ip}:${String(req.body?.email || "").toLowerCase().trim()}`;
+  const key = `${req.ip}:${String(req.body?.username || "").toLowerCase().trim()}`;
   const now = Date.now();
   const current = loginAttempts.get(key);
   if (!current || current.resetAt <= now) {
@@ -65,9 +67,9 @@ router.post("/login", loginRateLimit, async (req, res, next) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Credenciales inválidas" });
 
-    const user = await loginUser(parsed.data.email, parsed.data.password);
+    const user = await loginUser(parsed.data.username, parsed.data.password);
     if (!user) {
-      audit("LOGIN_FAILURE", { email: parsed.data.email.toLowerCase().trim(), ip: req.ip });
+      audit("LOGIN_FAILURE", { username: parsed.data.username.toLowerCase().trim(), ip: req.ip });
       return res.status(401).json({ message: "Credenciales inválidas" });
     }
     const { session, refreshToken } = await createRefreshSession({
@@ -77,7 +79,7 @@ router.post("/login", loginRateLimit, async (req, res, next) => {
     });
 
     setAuthCookies(res, { userId: user.id, sessionId: session.id, refreshToken });
-    audit("LOGIN_SUCCESS", { userId: user.id, email: user.email, ip: req.ip });
+    audit("LOGIN_SUCCESS", { userId: user.id, username: user.username, ip: req.ip });
 
     return res.json({ user });
   } catch (error) {
@@ -128,6 +130,18 @@ router.post("/logout-all", authenticate, async (req, res, next) => {
     clearAuthCookies(res);
     audit("LOGOUT", { userId: req.user!.id, allSessions: true, ip: req.ip });
     res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/change-password", authenticate, async (req, res, next) => {
+  try {
+    const parsed = changePasswordSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Datos invalidos", issues: parsed.error.flatten() });
+    const result = await changeOwnPassword(req.user!.id, parsed.data);
+    clearAuthCookies(res);
+    res.json(result);
   } catch (error) {
     next(error);
   }

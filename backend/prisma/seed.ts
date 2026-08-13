@@ -1,7 +1,7 @@
-import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { getKnownParentId } from "../src/utils/cargo-scope.js";
-import type { Role } from "../src/utils/cargo-scope.js";
+import { buildPasswordFields } from "../src/modules/usuarios/credentials.js";
+import { provisionMissingCargoUsers } from "../src/modules/usuarios/provision-cargo-users.js";
 
 const prisma = new PrismaClient();
 
@@ -37,26 +37,7 @@ const cargos = [
   [402, "JEFATURA DE GESTION DE CALIDAD"]
 ] as const;
 
-const seedAdminPassword = requireSeedEnv("SEED_ADMIN_PASSWORD");
-const seedGerentePassword = requireSeedEnv("SEED_GERENTE_PASSWORD");
-const seedJefePassword = requireSeedEnv("SEED_JEFE_PASSWORD");
-const seedCargoPassword = requireSeedEnv("SEED_CARGO_PASSWORD");
-
-const upsertUser = async (input: { nombre: string; email: string; password: string; role: Role; cargoId: number | null }) => {
-  const existing = await prisma.usuario.findUnique({ where: { email: input.email } });
-  if (existing) return;
-
-  await prisma.usuario.create({
-    data: {
-      nombre: input.nombre,
-      email: input.email,
-      passwordHash: await bcrypt.hash(input.password, 12),
-      role: input.role,
-      cargoId: input.cargoId,
-      activo: true
-    }
-  });
-};
+const adminPassword = requireSeedEnv("SEED_ADMIN_PASSWORD");
 
 for (const [id, nombre] of cargos) {
   await prisma.cargo.upsert({
@@ -66,45 +47,51 @@ for (const [id, nombre] of cargos) {
   });
 }
 
-await upsertUser({
-  nombre: "Administrador Desarrollo",
-  email: process.env.SEED_ADMIN_EMAIL || "admin@mbc.local",
-  password: seedAdminPassword,
-  role: "ADMIN",
-  cargoId: null
-});
-
-await upsertUser({
-  nombre: "Gerente Administrativa DEV",
-  email: "gerente200@mbc.local",
-  password: seedGerentePassword,
-  role: "GERENTE",
-  cargoId: 200
-});
-
-await upsertUser({
-  nombre: "Jefe Contabilidad DEV",
-  email: "jefe201@mbc.local",
-  password: seedJefePassword,
-  role: "JEFE",
-  cargoId: 201
-});
-
-const roleForCargo = (cargoId: number): Role => {
-  if (cargoId === 1 || cargoId === 100) return "DIRECCION";
-  if (cargoId === 200 || cargoId === 300 || cargoId === 400) return "GERENTE";
-  return "JEFE";
-};
-
-for (const [id, nombre] of cargos) {
-  await upsertUser({
-    nombre: `${nombre} DEV`,
-    email: `cargo${id}@mbc.local`,
-    password: seedCargoPassword,
-    role: roleForCargo(id),
-    cargoId: id
+const adminPasswordFields = await buildPasswordFields(adminPassword);
+const existingAdmin = await prisma.usuario.findUnique({ where: { username: "admin" } });
+if (!existingAdmin) {
+  const legacyAdmin = await prisma.usuario.findFirst({
+    where: { role: "ADMIN", cargoId: null, username: null },
+    orderBy: { createdAt: "asc" }
+  });
+  if (legacyAdmin) {
+    await prisma.usuario.update({
+      where: { id: legacyAdmin.id },
+      data: {
+        nombre: "Administrador del Sistema",
+        username: "admin",
+        ...adminPasswordFields,
+        activo: true,
+        autoProvisioned: false
+      }
+    });
+  } else {
+    await prisma.usuario.create({
+      data: {
+        nombre: "Administrador del Sistema",
+        email: process.env.SEED_ADMIN_EMAIL || "admin@legacy.local",
+        username: "admin",
+        ...adminPasswordFields,
+        role: "ADMIN",
+        cargoId: null,
+        activo: true,
+        autoProvisioned: false
+      }
+    });
+  }
+} else {
+  await prisma.usuario.update({
+    where: { id: existingAdmin.id },
+    data: {
+      nombre: "Administrador del Sistema",
+      activo: true,
+      autoProvisioned: false
+    }
   });
 }
 
-console.log("Seed completo: cargos base actualizados y usuarios faltantes creados.");
+const currentCargos = await prisma.cargo.findMany({ where: { activo: true }, orderBy: { id: "asc" } });
+const created = await provisionMissingCargoUsers(prisma, currentCargos);
+
+console.log(`Seed completo: admin listo y ${created.length} cuentas funcionales faltantes creadas.`);
 await prisma.$disconnect();

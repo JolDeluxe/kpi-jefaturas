@@ -24,7 +24,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
         expiresAt: { gt: new Date() }
       },
       include: {
-        user: { select: { id: true, nombre: true, email: true, role: true, cargoId: true, activo: true } }
+        user: { select: { id: true, nombre: true, email: true, username: true, role: true, cargoId: true, activo: true } }
       }
     });
 
@@ -34,6 +34,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       id: usuario.id,
       nombre: usuario.nombre,
       email: usuario.email,
+      username: usuario.username,
       role: usuario.role,
       cargoId: usuario.cargoId,
       sessionId: session.id

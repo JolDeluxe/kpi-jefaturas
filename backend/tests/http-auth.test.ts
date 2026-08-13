@@ -7,33 +7,34 @@ import { env } from "../src/env.js";
 import { prisma } from "../src/db/index.js";
 
 const testPassword = randomUUID();
-const cargo302Email = "test-auth-cargo302@mbc.local";
-const cargo200Email = "test-auth-cargo200@mbc.local";
+const cargo901Username = "test.auth-cargo901";
+const cargo900Username = "test.auth-cargo900";
+const cargo901Email = "test-auth-cargo901@legacy.local";
+const cargo900Email = "test-auth-cargo900@legacy.local";
 
 describe("endpoints protegidos", () => {
   beforeAll(async () => {
-    await prisma.cargo.upsert({ where: { id: 1 }, update: { nombre: "MBC", parentId: null, activo: true }, create: { id: 1, nombre: "MBC", parentId: null, activo: true } });
-    await prisma.cargo.upsert({ where: { id: 200 }, update: { nombre: "GERENCIA ADMINISTRATIVA", parentId: 1, activo: true }, create: { id: 200, nombre: "GERENCIA ADMINISTRATIVA", parentId: 1, activo: true } });
-    await prisma.cargo.upsert({ where: { id: 300 }, update: { nombre: "GERENCIA OPERATIVA", parentId: 1, activo: true }, create: { id: 300, nombre: "GERENCIA OPERATIVA", parentId: 1, activo: true } });
-    await prisma.cargo.upsert({ where: { id: 302 }, update: { nombre: "JEFATURA DE PRODUCCION BOTAS II", parentId: 300, activo: true }, create: { id: 302, nombre: "JEFATURA DE PRODUCCION BOTAS II", parentId: 300, activo: true } });
+    await prisma.cargo.upsert({ where: { id: 900 }, update: { nombre: "GERENCIA TEST AUTH", parentId: null, activo: true }, create: { id: 900, nombre: "GERENCIA TEST AUTH", parentId: null, activo: true } });
+    await prisma.cargo.upsert({ where: { id: 901 }, update: { nombre: "JEFATURA TEST AUTH", parentId: 900, activo: true }, create: { id: 901, nombre: "JEFATURA TEST AUTH", parentId: 900, activo: true } });
 
     const passwordHash = await bcrypt.hash(testPassword, 12);
     await prisma.usuario.upsert({
-      where: { email: cargo302Email },
-      update: { passwordHash, role: "JEFE", cargoId: 302, activo: true },
-      create: { nombre: "Auth Test Cargo 302", email: cargo302Email, passwordHash, role: "JEFE", cargoId: 302, activo: true }
+      where: { username: cargo901Username },
+      update: { passwordHash, role: "JEFE", cargoId: 901, activo: true },
+      create: { nombre: "Auth Test Cargo 901", email: cargo901Email, username: cargo901Username, passwordHash, role: "JEFE", cargoId: 901, activo: true }
     });
     await prisma.usuario.upsert({
-      where: { email: cargo200Email },
-      update: { passwordHash, role: "GERENTE", cargoId: 200, activo: true },
-      create: { nombre: "Auth Test Cargo 200", email: cargo200Email, passwordHash, role: "GERENTE", cargoId: 200, activo: true }
+      where: { username: cargo900Username },
+      update: { passwordHash, role: "GERENTE", cargoId: 900, activo: true },
+      create: { nombre: "Auth Test Cargo 900", email: cargo900Email, username: cargo900Username, passwordHash, role: "GERENTE", cargoId: 900, activo: true }
     });
   });
 
   afterAll(async () => {
-    const users = await prisma.usuario.findMany({ where: { email: { in: [cargo302Email, cargo200Email] } }, select: { id: true } });
+    const users = await prisma.usuario.findMany({ where: { username: { in: [cargo901Username, cargo900Username] } }, select: { id: true } });
     await prisma.refreshSession.deleteMany({ where: { userId: { in: users.map((user) => user.id) } } });
-    await prisma.usuario.deleteMany({ where: { email: { in: [cargo302Email, cargo200Email] } } });
+    await prisma.usuario.deleteMany({ where: { username: { in: [cargo901Username, cargo900Username] } } });
+    await prisma.cargo.deleteMany({ where: { id: { in: [900, 901] } } });
   });
 
   it("GET /api/auth/me sin sesion regresa 401", async () => {
@@ -46,10 +47,10 @@ describe("endpoints protegidos", () => {
 
     const login = await agent
       .post("/api/auth/login")
-      .send({ email: cargo302Email, password: testPassword });
+      .send({ username: cargo901Username, password: testPassword });
 
     expect(login.status).toBe(200);
-    expect(login.body.user.email).toBe(cargo302Email);
+    expect(login.body.user.username).toBe(cargo901Username);
     const loginCookies = login.headers["set-cookie"] as unknown as string[];
     const originalRefreshCookie = loginCookies.find((cookie) => cookie.startsWith(`${env.REFRESH_COOKIE_NAME}=`));
     expect(loginCookies.some((cookie) => cookie.startsWith(`${env.COOKIE_NAME}=`) && cookie.includes("HttpOnly"))).toBe(true);
@@ -57,7 +58,7 @@ describe("endpoints protegidos", () => {
 
     const me = await agent.get("/api/auth/me");
     expect(me.status).toBe(200);
-    expect(me.body.user.email).toBe(cargo302Email);
+    expect(me.body.user.username).toBe(cargo901Username);
 
     const refresh = await agent.post("/api/auth/refresh");
     expect(refresh.status).toBe(200);
@@ -80,7 +81,7 @@ describe("endpoints protegidos", () => {
   it("login incorrecto usa mensaje generico", async () => {
     const response = await request(app)
       .post("/api/auth/login")
-      .send({ email: "noexiste@mbc.local", password: "cualquiercosa" });
+      .send({ username: "noexiste", password: "cualquiercosa" });
 
     expect(response.status).toBe(401);
     expect(response.body.message).toBe("Credenciales inválidas");
@@ -88,7 +89,7 @@ describe("endpoints protegidos", () => {
 
   it("cargo fuera de scope regresa 403", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: cargo200Email, password: testPassword });
+    await agent.post("/api/auth/login").send({ username: cargo900Username, password: testPassword });
 
     const response = await agent.get("/api/kpis").query({ cargoId: 300, anio: 2026, periodo: 1 });
 

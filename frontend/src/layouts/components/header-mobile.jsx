@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { cargosApi } from '@/features/cargos/api/cargos-api';
+import AccountModal from '@/features/auth/components/account-modal.jsx';
 import {
   GLOBAL_CARGO_ID,
   GLOBAL_NAV_ITEM,
@@ -16,7 +17,6 @@ import {
 import { useAuthStore } from '@/stores/auth-store';
 
 const mobileItems = [
-  { id: 'importaciones', label: 'Importaciones', path: '/dashboard/importaciones', superAdminOnly: true },
   { id: 'usuarios', label: 'Usuarios', path: '/dashboard/usuarios', superAdminOnly: true }
 ];
 
@@ -25,6 +25,7 @@ export default function HeaderMobile({ user }) {
   const [departmentQuery, setDepartmentQuery] = useState('');
   const [selectedAreaId, setSelectedAreaId] = useState(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [cargos, setCargos] = useState([]);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -242,10 +243,10 @@ export default function HeaderMobile({ user }) {
         )}
 
         <footer className="drawer-actions">
-          <div className="drawer-user">
-            <strong>{user?.nombre}</strong>
-            <span>{user?.role}</span>
-          </div>
+          <button className="drawer-user profile-trigger-mobile" onClick={() => setProfileOpen(true)}>
+            <strong>{user?.username || user?.nombre}</strong>
+            <span>{user?.nombre} - {user?.role}</span>
+          </button>
           <button className="danger full" onClick={handleLogout} disabled={loggingOut}>
             {loggingOut ? 'Cerrando sesion...' : 'Cerrar sesion'}
           </button>
@@ -272,6 +273,7 @@ export default function HeaderMobile({ user }) {
         </div>
       </div>
       {mobileDrawer && createPortal(mobileDrawer, document.body)}
+      {profileOpen && createPortal(<AccountModal user={user} onClose={() => setProfileOpen(false)} />, document.body)}
     </nav>
   );
 }

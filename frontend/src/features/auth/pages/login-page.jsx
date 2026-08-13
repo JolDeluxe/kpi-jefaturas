@@ -1,4 +1,4 @@
-import { Lock, Mail } from 'lucide-react';
+import { Lock, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth-store';
@@ -8,7 +8,7 @@ const DESKTOP_MEDIA_QUERY = '(min-width: 1024px)';
 export default function LoginPage() {
   const login = useAuthStore((state) => state.login);
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -27,7 +27,7 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      await login(email, password);
+      await login(username, password);
       navigate(window.matchMedia(DESKTOP_MEDIA_QUERY).matches ? '/dashboard' : '/dashboard/kpis', { replace: true });
     } catch (err) {
       setError(err.response?.data?.message || 'No se pudo iniciar sesion');
@@ -58,10 +58,16 @@ export default function LoginPage() {
         <h1>KPIs Jefaturas</h1>
         <form onSubmit={submit} className="login-form">
           <label>
-            <span>Email</span>
+            <span>Usuario</span>
             <div className="input-icon">
-              <Mail size={17} />
-              <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" required />
+              <UserRound size={17} />
+              <input
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                type="text"
+                autoComplete="username"
+                required
+              />
             </div>
           </label>
           <label>

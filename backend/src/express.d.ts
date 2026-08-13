@@ -6,6 +6,7 @@ declare global {
       id: string;
       nombre: string;
       email: string;
+      username: string | null;
       role: Role;
       cargoId: number | null;
       sessionId?: string;

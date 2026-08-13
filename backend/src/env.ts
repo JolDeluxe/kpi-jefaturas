@@ -1,6 +1,8 @@
 import dotenv from "dotenv";
+import path from "node:path";
 import { z } from "zod";
 
+dotenv.config({ path: path.resolve(process.cwd(), "../.env") });
 dotenv.config();
 
 if (!process.env.DATABASE_URL && process.env.DATABASE_PATH) {
@@ -17,6 +19,7 @@ const envSchema = z.object({
   REFRESH_COOKIE_NAME: z.string().default("kpi_refresh"),
   FRONTEND_DEV_ORIGIN: z.string().default("http://localhost:5173"),
   SYNC_API_KEY: z.string().min(1),
+  CREDENTIALS_ENCRYPTION_KEY: z.string().optional(),
   KPI_SOURCE: z.enum(["disabled", "local", "onedrive"]).default("disabled"),
   KPI_LOCAL_FILE_PATH: z.string().optional(),
   KPI_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(1800000),

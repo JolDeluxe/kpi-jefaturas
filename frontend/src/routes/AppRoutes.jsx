@@ -12,6 +12,7 @@ import PublicRoute from './PublicRoute.jsx';
 import ImportacionesPage from '@/features/importaciones/pages/importaciones-page.jsx';
 import UsersPage from '@/features/usuarios/pages/users-page.jsx';
 import RoleGuard from './RoleGuard.jsx';
+import SystemAdminGuard from './SystemAdminGuard.jsx';
 
 export default function AppRoutes() {
   const hydrate = useAuthStore((state) => state.hydrate);
@@ -31,7 +32,7 @@ export default function AppRoutes() {
           <Route path="/dashboard" element={<HomeDashboard />} />
           <Route path="/dashboard/kpis" element={<KpiDashboardPage />} />
           <Route path="/dashboard/importaciones" element={<RoleGuard roles={['ADMIN', 'DIRECCION']}><ImportacionesPage /></RoleGuard>} />
-          <Route path="/dashboard/usuarios" element={<RoleGuard roles={['ADMIN']}><UsersPage /></RoleGuard>} />
+          <Route path="/dashboard/usuarios" element={<SystemAdminGuard><UsersPage /></SystemAdminGuard>} />
           <Route path="/unauthorized" element={<Unauthorized />} />
         </Route>
       </Route>

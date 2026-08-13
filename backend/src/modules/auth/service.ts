@@ -2,6 +2,8 @@ import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import { prisma } from "../../db/index.js";
 import { isRole } from "../../utils/cargo-scope.js";
+import { auditPersistent } from "../../utils/audit-log.js";
+import { buildPasswordFields } from "../usuarios/credentials.js";
 
 const REFRESH_SESSION_DAYS = 30;
 
@@ -15,6 +17,7 @@ const serializeUser = (user: {
   id: string;
   nombre: string;
   email: string;
+  username: string | null;
   role: string;
   cargoId: number | null;
   cargo?: unknown;
@@ -24,14 +27,15 @@ const serializeUser = (user: {
     id: user.id,
     nombre: user.nombre,
     email: user.email,
+    username: user.username,
     role: user.role,
     cargoId: user.cargoId,
     cargo: user.cargo
   };
 };
 
-export const loginUser = async (email: string, password: string) => {
-  const user = await prisma.usuario.findUnique({ where: { email: email.toLowerCase().trim() }, include: { cargo: true } });
+export const loginUser = async (username: string, password: string) => {
+  const user = await prisma.usuario.findUnique({ where: { username: username.toLowerCase().trim() }, include: { cargo: true } });
   if (!user || !user.activo) return null;
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) return null;
@@ -96,10 +100,31 @@ export const revokeAllRefreshSessions = async (userId: string) => {
   });
 };
 
+export const changeOwnPassword = async (userId: string, input: { currentPassword: string; newPassword: string }) => {
+  const user = await prisma.usuario.findUnique({ where: { id: userId }, select: { id: true, username: true, passwordHash: true, activo: true } });
+  if (!user || !user.activo) {
+    const error = new Error("Sesion invalida.");
+    Object.assign(error, { statusCode: 401 });
+    throw error;
+  }
+
+  const valid = await bcrypt.compare(input.currentPassword, user.passwordHash);
+  if (!valid) {
+    const error = new Error("La contrasena actual no es correcta.");
+    Object.assign(error, { statusCode: 400 });
+    throw error;
+  }
+
+  await prisma.usuario.update({ where: { id: userId }, data: await buildPasswordFields(input.newPassword) });
+  await prisma.refreshSession.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
+  await auditPersistent("PASSWORD_SELF_CHANGED", { actorUserId: userId, targetUserId: userId, metadata: { username: user.username } });
+  return { ok: true, reauthRequired: true };
+};
+
 export const getMe = async (id: string) => {
   const user = await prisma.usuario.findUnique({
     where: { id },
-    select: { id: true, nombre: true, email: true, role: true, cargoId: true, cargo: true, activo: true }
+    select: { id: true, nombre: true, email: true, username: true, role: true, cargoId: true, cargo: true, activo: true }
   });
   if (!user || !user.activo) return null;
   return user;

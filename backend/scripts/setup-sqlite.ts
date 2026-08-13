@@ -62,10 +62,14 @@ CREATE TABLE IF NOT EXISTS "Usuario" (
   "id" TEXT NOT NULL PRIMARY KEY,
   "nombre" TEXT NOT NULL,
   "email" TEXT NOT NULL,
+  "username" TEXT,
   "passwordHash" TEXT NOT NULL,
+  "passwordEncrypted" TEXT,
   "role" TEXT NOT NULL,
   "cargoId" INTEGER,
   "activo" BOOLEAN NOT NULL DEFAULT true,
+  "autoProvisioned" BOOLEAN NOT NULL DEFAULT false,
+  "lastPasswordChangedAt" DATETIME,
   "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" DATETIME NOT NULL,
   CONSTRAINT "Usuario_cargoId_fkey" FOREIGN KEY ("cargoId") REFERENCES "Cargo" ("id") ON DELETE SET NULL ON UPDATE CASCADE
@@ -100,6 +104,15 @@ CREATE TABLE IF NOT EXISTS "KpiSyncState" (
   "lastRowCount" INTEGER,
   "lastError" TEXT,
   "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS "AuditLog" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "actorUserId" TEXT,
+  "targetUserId" TEXT,
+  "event" TEXT NOT NULL,
+  "metadata" TEXT,
+  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS "Kpi" (
@@ -142,6 +155,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS "Usuario_email_key" ON "Usuario"("email");
 CREATE UNIQUE INDEX IF NOT EXISTS "RefreshSession_tokenHash_key" ON "RefreshSession"("tokenHash");
 CREATE INDEX IF NOT EXISTS "RefreshSession_userId_idx" ON "RefreshSession"("userId");
 CREATE INDEX IF NOT EXISTS "RefreshSession_expiresAt_idx" ON "RefreshSession"("expiresAt");
+CREATE INDEX IF NOT EXISTS "AuditLog_event_createdAt_idx" ON "AuditLog"("event", "createdAt");
+CREATE INDEX IF NOT EXISTS "AuditLog_actorUserId_idx" ON "AuditLog"("actorUserId");
+CREATE INDEX IF NOT EXISTS "AuditLog_targetUserId_idx" ON "AuditLog"("targetUserId");
 CREATE INDEX IF NOT EXISTS "Importacion_sha256_status_idx" ON "Importacion"("sha256", "status");
 CREATE UNIQUE INDEX IF NOT EXISTS "KpiResultado_anio_periodo_cargoId_kpiId_key" ON "KpiResultado"("anio", "periodo", "cargoId", "kpiId");
 CREATE INDEX IF NOT EXISTS "KpiResultado_cargoId_anio_periodo_idx" ON "KpiResultado"("cargoId", "anio", "periodo");
@@ -154,7 +170,45 @@ const ensureColumn = (table: string, column: string, definition: string) => {
 
 ensureColumn("Importacion", "source", "\"source\" TEXT NOT NULL DEFAULT 'manual'");
 ensureColumn("Importacion", "sourceVersion", "\"sourceVersion\" TEXT");
+ensureColumn("Usuario", "username", "\"username\" TEXT");
+ensureColumn("Usuario", "passwordEncrypted", "\"passwordEncrypted\" TEXT");
+ensureColumn("Usuario", "autoProvisioned", "\"autoProvisioned\" BOOLEAN NOT NULL DEFAULT false");
+ensureColumn("Usuario", "lastPasswordChangedAt", "\"lastPasswordChangedAt\" DATETIME");
 db.exec(`CREATE INDEX IF NOT EXISTS "Importacion_source_sourceVersion_idx" ON "Importacion"("source", "sourceVersion");`);
+
+const duplicateCargoIds = db.prepare(`
+  SELECT "cargoId"
+  FROM "Usuario"
+  WHERE "cargoId" IS NOT NULL
+  GROUP BY "cargoId"
+  HAVING COUNT(*) > 1
+`).all() as Array<{ cargoId: number }>;
+
+for (const { cargoId } of duplicateCargoIds) {
+  const users = db.prepare(`
+    SELECT "id", "username", "passwordEncrypted", "autoProvisioned", "createdAt"
+    FROM "Usuario"
+    WHERE "cargoId" = ?
+    ORDER BY
+      CASE WHEN "username" IS NOT NULL AND "username" <> '' THEN 0 ELSE 1 END,
+      CASE WHEN "passwordEncrypted" IS NOT NULL AND "passwordEncrypted" <> '' THEN 0 ELSE 1 END,
+      CASE WHEN "autoProvisioned" = 1 THEN 0 ELSE 1 END,
+      "createdAt" ASC
+  `).all(cargoId) as Array<{ id: string }>;
+
+  const [, ...duplicates] = users;
+  for (const user of duplicates) {
+    db.prepare(`UPDATE "Usuario" SET "cargoId" = NULL, "activo" = false, "updatedAt" = CURRENT_TIMESTAMP WHERE "id" = ?`).run(user.id);
+  }
+}
+
+db.exec(`
+CREATE UNIQUE INDEX IF NOT EXISTS "Usuario_username_key" ON "Usuario"("username");
+CREATE UNIQUE INDEX IF NOT EXISTS "Usuario_cargoId_unique_not_null" ON "Usuario"("cargoId") WHERE "cargoId" IS NOT NULL;
+CREATE INDEX IF NOT EXISTS "AuditLog_event_createdAt_idx" ON "AuditLog"("event", "createdAt");
+CREATE INDEX IF NOT EXISTS "AuditLog_actorUserId_idx" ON "AuditLog"("actorUserId");
+CREATE INDEX IF NOT EXISTS "AuditLog_targetUserId_idx" ON "AuditLog"("targetUserId");
+`);
 
 db.close();
 console.log(`SQLite listo en ${dbPath}`);

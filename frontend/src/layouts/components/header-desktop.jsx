@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import AccountModal from '@/features/auth/components/account-modal.jsx';
 import { cargosApi } from '@/features/cargos/api/cargos-api';
 import {
   GLOBAL_CARGO_ID,
@@ -16,12 +17,14 @@ export default function HeaderDesktop({ user }) {
   const [searchParams] = useSearchParams();
   const logout = useAuthStore((state) => state.logout);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [cargos, setCargos] = useState([]);
   const [expandedAreaId, setExpandedAreaId] = useState(null);
   const activeCargoId = Number(searchParams.get('cargoId')) || null;
   const activeArea = getAreaForCargo(activeCargoId);
   const visibleIds = useMemo(() => new Set(cargos.map((cargo) => cargo.id)), [cargos]);
+  const isSystemAdmin = user?.role === 'ADMIN' && user?.cargoId == null;
   const canSeeGlobal = visibleIds.has(GLOBAL_CARGO_ID);
   const byId = useMemo(() => new Map(cargos.map((cargo) => [cargo.id, cargo])), [cargos]);
   const areas = useMemo(() => getVisibleAreas(cargos), [cargos]);
@@ -72,7 +75,15 @@ export default function HeaderDesktop({ user }) {
           <img src="/img/01_Cuadra.webp" alt="Cuadra" />
         </button>
         <div className="user-zone">
-          <span>{user?.nombre}</span>
+          <button className="profile-trigger" onClick={() => setProfileOpen(true)}>{user?.username || user?.nombre}</button>
+          {isSystemAdmin && (
+            <button
+              className={`admin-nav-link ${location.pathname === '/dashboard/usuarios' ? 'active' : ''}`}
+              onClick={() => navigate('/dashboard/usuarios')}
+            >
+              Usuarios
+            </button>
+          )}
           {!confirmLogout ? (
             <button className="logout-outline" onClick={() => setConfirmLogout(true)}>Salir</button>
           ) : (
@@ -82,6 +93,7 @@ export default function HeaderDesktop({ user }) {
             </div>
           )}
         </div>
+        {profileOpen && <AccountModal user={user} onClose={() => setProfileOpen(false)} />}
       </div>
       <div className="nav-area-row" aria-label="Navegacion por gerencias">
         {canSeeGlobal && (
@@ -103,7 +115,7 @@ export default function HeaderDesktop({ user }) {
         ))}
       </div>
       {visibleChildren.length > 0 && (
-        <div className="nav-submodule-row" aria-label="Departamentos">
+        <div className={`nav-submodule-row ${visibleChildren.length <= 4 ? 'compact' : ''}`} aria-label="Departamentos">
           {visibleChildren.map((cargo) => (
             <button
               key={cargo.id}

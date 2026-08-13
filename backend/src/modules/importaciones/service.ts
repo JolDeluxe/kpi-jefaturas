@@ -4,7 +4,8 @@ import { prisma } from "../../db/index.js";
 import { parseKpiCsvContent, parseKpiCsvFile, type ParsedKpiRow } from "../../utils/csv-ingest.js";
 import { getKnownParentId } from "../../utils/cargo-scope.js";
 import { hashBufferSha256, hashFileSha256 } from "../../utils/hash-file.js";
-import { audit } from "../../utils/audit-log.js";
+import { audit, auditPersistent } from "../../utils/audit-log.js";
+import { provisionMissingCargoUsers } from "../usuarios/provision-cargo-users.js";
 
 export type ImportCsvInput =
   | { type: "file"; filePath: string; filename?: string; source?: string; sourceVersion?: string | null }
@@ -68,6 +69,7 @@ export const importKpiCsv = async (input: ImportCsvInput, client: PrismaClient =
 
   try {
     const rows = input.type === "file" ? await parseKpiCsvFile(input.filePath) : parseKpiCsvContent(input.buffer.toString("utf8"));
+    let autoCreatedUsers: Array<{ id: string; username: string | null; cargoId: number | null; role: string }> = [];
 
     await client.$transaction(async (tx) => {
       const cargos = uniqueBy(rows, (row) => row.cargoId).sort((a, b) => {
@@ -82,6 +84,12 @@ export const importKpiCsv = async (input: ImportCsvInput, client: PrismaClient =
           create: { id: cargo.cargoId, nombre: cargo.cargoNombre, parentId: getKnownParentId(cargo.cargoId), activo: true }
         });
       }
+
+      autoCreatedUsers = await provisionMissingCargoUsers(
+        tx,
+        cargos.map((cargo) => ({ id: cargo.cargoId, nombre: cargo.cargoNombre, parentId: getKnownParentId(cargo.cargoId), activo: true })),
+        { audit: false }
+      );
 
       for (const kpi of uniqueBy(rows, (row) => row.kpiId)) {
         await tx.kpi.upsert({
@@ -105,6 +113,12 @@ export const importKpiCsv = async (input: ImportCsvInput, client: PrismaClient =
     });
 
     const complete = await client.importacion.findUniqueOrThrow({ where: { id: importacion.id } });
+    for (const user of autoCreatedUsers) {
+      await auditPersistent("USER_AUTO_CREATED", {
+        targetUserId: user.id,
+        metadata: { username: user.username, cargoId: user.cargoId, role: user.role, importacionId: complete.id }
+      });
+    }
     audit("CSV_IMPORT_SUCCESS", { importacionId: complete.id, filename, rowCount: rows.length, duplicated: false });
     return { importacion: complete, duplicated: false, rowCount: rows.length };
   } catch (error) {
