@@ -158,4 +158,104 @@ describe("Dynamic Cargo Hierarchy & Reconciliation Tests", () => {
       });
     });
   });
+
+  describe("Cargo Activation & Deactivation on CSV Import", () => {
+    const csvHeader = "01 Año,02 Mes,04 Id Cargo,03 Orden,05 Puesto,06 Id,07 Valor,08 KPI,09 Resultado,10 Objetivo,11 Valor Real,12 Calificacion,13 Tendencia,14 Parametros,15 Suma Valor,16 Suma Calificacion,17 Calificacion General";
+
+    it("activates present cargos and deactivates absent ones, reusing existing users and avoiding deactivating MBC", async () => {
+      // 1. Setup inicial de cargos y limpieza de imports de prueba específicos
+      await prisma.kpiResultado.deleteMany({ where: { cargoId: { in: [700, 701, 702] } } });
+      await prisma.usuario.deleteMany({ where: { cargoId: { in: [700, 701, 702] } } });
+      await prisma.cargo.deleteMany({ where: { id: { in: [700, 701, 702] } } });
+      await prisma.importacion.deleteMany({
+        where: {
+          filename: {
+            in: [
+              "test-import-unique-a1.csv",
+              "test-import-unique-a2.csv",
+              "test-import-unique-ainvalid.csv",
+              "test-import-unique-a3.csv"
+            ]
+          }
+        }
+      });
+
+      const csvContent1 = `${csvHeader}
+2026,1,700,1,GERENCIA COMERCIAL,KPI-1,100,KPI,8,10,8,4,3,Param,8,4,80%
+2026,1,701,2,JEFATURA VENTAS,KPI-2,100,KPI,8,10,8,4,3,Param,8,4,80%
+`;
+      // Importar primer snapshot (crea 700 y 701 activos)
+      const res1 = await importKpiCsv({ type: "buffer", buffer: Buffer.from(csvContent1), filename: "test-import-unique-a1.csv" });
+      expect(res1.duplicated).toBeFalsy();
+
+      const cargo700 = await prisma.cargo.findUnique({ where: { id: 700 } });
+      const cargo701 = await prisma.cargo.findUnique({ where: { id: 701 } });
+      expect(cargo700?.activo).toBe(true);
+      expect(cargo701?.activo).toBe(true);
+
+      const user700 = await prisma.usuario.findFirst({ where: { cargoId: 700 } });
+      expect(user700).not.toBeNull();
+
+      // 2. Siguiente snapshot no contiene 701 pero contiene 700 y añade 702 (con valor 111 para cambiar hash)
+      const csvContent2 = `${csvHeader}
+2026,1,700,1,GERENCIA COMERCIAL,KPI-1,111,KPI,8,10,8,4,3,Param,8,4,80%
+2026,1,702,3,JEFATURA EXPORTACION,KPI-3,100,KPI,8,10,8,4,3,Param,8,4,80%
+`;
+      const res2 = await importKpiCsv({ type: "buffer", buffer: Buffer.from(csvContent2), filename: "test-import-unique-a2.csv" });
+      expect(res2.duplicated).toBeFalsy();
+
+      const cargo700After = await prisma.cargo.findUnique({ where: { id: 700 } });
+      const cargo701After = await prisma.cargo.findUnique({ where: { id: 701 } });
+      const cargo702After = await prisma.cargo.findUnique({ where: { id: 702 } });
+      expect(cargo700After?.activo).toBe(true);
+      expect(cargo701After?.activo).toBe(false); // Desactivado
+      expect(cargo702After?.activo).toBe(true);  // Creado activo
+
+      // El usuario asociado a 701 sigue existiendo
+      const user701After = await prisma.usuario.findFirst({ where: { cargoId: 701 } });
+      expect(user701After).not.toBeNull();
+
+      // MBC (id=1) nunca se desactiva
+      const mbcCargo = await prisma.cargo.findUnique({ where: { id: 1 } });
+      expect(mbcCargo?.activo).toBe(true);
+
+      // 3. Importación inválida que omite 700 (error en fila) -> No debe desactivar nada por rollback
+      const csvInvalid = `${csvHeader}
+INVALID_DATA,1,702,3,JEFATURA EXPORTACION,KPI-3,100,KPI,8,10,8,4,3,Param,8,4,80%
+`;
+      await expect(importKpiCsv({ type: "buffer", buffer: Buffer.from(csvInvalid), filename: "test-import-unique-ainvalid.csv" })).rejects.toThrow();
+
+      const cargo700PostInvalid = await prisma.cargo.findUnique({ where: { id: 700 } });
+      expect(cargo700PostInvalid?.activo).toBe(true); // Sigue activo, sin cambios por error
+
+      // 4. Snapshot posterior vuelve a traer 701 -> se reactiva (con valor 122 para cambiar hash)
+      const csvContent3 = `${csvHeader}
+2026,1,700,1,GERENCIA COMERCIAL,KPI-1,122,KPI,8,10,8,4,3,Param,8,4,80%
+2026,1,701,2,JEFATURA VENTAS,KPI-2,100,KPI,8,10,8,4,3,Param,8,4,80%
+2026,1,702,3,JEFATURA EXPORTACION,KPI-3,100,KPI,8,10,8,4,3,Param,8,4,80%
+`;
+      const res3 = await importKpiCsv({ type: "buffer", buffer: Buffer.from(csvContent3), filename: "test-import-unique-a3.csv" });
+      expect(res3.duplicated).toBeFalsy();
+
+      const cargo701Reactived = await prisma.cargo.findUnique({ where: { id: 701 } });
+      expect(cargo701Reactived?.activo).toBe(true); // Reactivado!
+
+      // Limpieza
+      await prisma.kpiResultado.deleteMany({ where: { cargoId: { in: [700, 701, 702] } } });
+      await prisma.usuario.deleteMany({ where: { cargoId: { in: [700, 701, 702] } } });
+      await prisma.cargo.deleteMany({ where: { id: { in: [700, 701, 702] } } });
+      await prisma.importacion.deleteMany({
+        where: {
+          filename: {
+            in: [
+              "test-import-unique-a1.csv",
+              "test-import-unique-a2.csv",
+              "test-import-unique-ainvalid.csv",
+              "test-import-unique-a3.csv"
+            ]
+          }
+        }
+      });
+    });
+  });
 });

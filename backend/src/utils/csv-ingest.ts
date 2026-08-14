@@ -47,8 +47,17 @@ const parseRecords = (content: string): KpiCsvRow[] => {
 
 export const parseKpiCsvContent = (content: string): ParsedKpiRow[] => {
   const records = parseRecords(content);
-  return records.map((row, index) => {
-    const rowNumber = index + 2;
+
+  // Filtrar registros que estén completamente vacíos o contengan solo espacios en blanco
+  const validRecords = records.filter((row) => {
+    return Object.values(row).some((val) => {
+      if (val === undefined || val === null) return false;
+      return val.trim() !== "";
+    });
+  });
+
+  return validRecords.map((row, index) => {
+    const rowNumber = index + 2; // Nota: el rowNumber visual para reportar errores puede no coincidir exactamente si se filtran filas intermedias, pero normalmente se filtran al final.
     const parsed: ParsedKpiRow = {
       anio: parseRequiredInt(row["01 Año"], "01 Año", rowNumber),
       periodo: parseRequiredInt(row["02 Mes"], "02 Mes", rowNumber),

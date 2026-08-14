@@ -154,6 +154,20 @@ export const importKpiCsv = async (input: ImportCsvInput, client: PrismaClient =
         await tx.kpiResultado.create({ data });
       }
 
+      // Desactivar cargos funcionales ausentes en la importación (excluyendo el cargo estructural especial 1 / MBC)
+      const presentCargoIds = cargos.map((c) => c.cargoId);
+      await tx.cargo.updateMany({
+        where: {
+          id: {
+            notIn: presentCargoIds,
+            not: 1 // MBC
+          }
+        },
+        data: {
+          activo: false
+        }
+      });
+
       await tx.importacion.update({
         where: { id: importacion.id },
         data: { status: "SUCCESS", importedAt: new Date(), rowCount: rows.length }

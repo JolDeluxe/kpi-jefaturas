@@ -23,4 +23,22 @@ describe("parser CSV KPI", () => {
   it("rechaza CSV vacio", () => {
     expect(() => parseKpiCsvContent(`${header}\n`)).toThrow(/CSV vacio/);
   });
+
+  it("ignora lineas completamente vacias o con espacios, pero falla con filas parcialmente vacias", () => {
+    const csvConLineasVacias = `${header}
+2026,1,201,1,JEFATURA DE CONTABILIDAD,20101,10,KPI TEST,"$ 1,234.50 ","80 % ","NA ",0,3,"95 %  -  100 %<BR>Menor a 2 dias",95,75,78.9 %
+,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,
+2026,1,201,2,JEFATURA DE CONTABILIDAD,20102,10,KPI TEST 2,"$ 1,234.50 ","80 % ","NA ",0,3,"95 %",95,75,78.9 %
+`;
+    const rows = parseKpiCsvContent(csvConLineasVacias);
+    expect(rows.length).toBe(2); // Debe ignorar las 2 lineas vacias/espacios del medio y reportar solo las 2 validas
+    expect(rows[0].kpiId).toBe("20101");
+    expect(rows[1].kpiId).toBe("20102");
+
+    const csvParcial = `${header}
+,1,201,1,JEFATURA DE CONTABILIDAD,20101,10,KPI TEST,"$ 1,234.50 ","80 % ","NA ",0,3,"95 %",95,75,78.9 %
+`;
+    expect(() => parseKpiCsvContent(csvParcial)).toThrow(/debe ser entero/);
+  });
 });
