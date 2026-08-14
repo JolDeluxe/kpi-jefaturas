@@ -77,17 +77,65 @@ export const importKpiCsv = async (input: ImportCsvInput, client: PrismaClient =
         return depthDiff || a.cargoId - b.cargoId;
       });
 
+      // Primero insertar/actualizar todos los cargos en la transacción
       for (const cargo of cargos) {
         await tx.cargo.upsert({
           where: { id: cargo.cargoId },
-          update: { nombre: cargo.cargoNombre, parentId: getKnownParentId(cargo.cargoId), activo: true },
-          create: { id: cargo.cargoId, nombre: cargo.cargoNombre, parentId: getKnownParentId(cargo.cargoId), activo: true }
+          update: { nombre: cargo.cargoNombre, activo: true },
+          create: { id: cargo.cargoId, nombre: cargo.cargoNombre, activo: true }
+        });
+      }
+
+      // Después de que todos existan, calcular y asignar parentId de forma segura
+      const dbCargos = await tx.cargo.findMany();
+      const cargosMap = new Map(dbCargos.map((c) => [c.id, c]));
+
+      for (const cargo of cargos) {
+        if (cargo.cargoId === 1) {
+          await tx.cargo.update({
+            where: { id: cargo.cargoId },
+            data: { parentId: null }
+          });
+          continue;
+        }
+
+        const proposedParent = getKnownParentId(cargo.cargoId);
+        let finalParentId: number | null = null; // Para importaciones nuevas, por defecto no tiene padre si no se puede validar
+
+        if (proposedParent !== null) {
+          const parentCandidate = cargosMap.get(proposedParent);
+          if (parentCandidate) {
+            const nombreNormalized = parentCandidate.nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+            const esValido = nombreNormalized.startsWith("GERENCIA") || nombreNormalized.startsWith("DIRECCION") || parentCandidate.id === 1;
+            if (esValido) {
+              finalParentId = proposedParent;
+            }
+          }
+        }
+
+        // Si no se puede inferir/validar el nuevo parentId y ya tiene uno en base de datos, conservar el existente
+        const existingCargoInDb = cargosMap.get(cargo.cargoId);
+        if (finalParentId === null && existingCargoInDb && existingCargoInDb.parentId !== null) {
+          finalParentId = existingCargoInDb.parentId;
+        }
+
+        await tx.cargo.update({
+          where: { id: cargo.cargoId },
+          data: { parentId: finalParentId }
         });
       }
 
       autoCreatedUsers = await provisionMissingCargoUsers(
         tx,
-        cargos.map((cargo) => ({ id: cargo.cargoId, nombre: cargo.cargoNombre, parentId: getKnownParentId(cargo.cargoId), activo: true })),
+        cargos.map((cargo) => {
+          const dbCargo = cargosMap.get(cargo.cargoId);
+          return {
+            id: cargo.cargoId,
+            nombre: cargo.cargoNombre,
+            parentId: dbCargo?.parentId ?? null,
+            activo: true
+          };
+        }),
         { audit: false }
       );
 

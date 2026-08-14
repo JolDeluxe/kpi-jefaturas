@@ -56,8 +56,17 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
 
 let server: ReturnType<typeof app.listen> | null = null;
 
-export const startServer = () => {
+export const startServer = async () => {
   if (server) return server;
+
+  // Reconciliar jerarquía de cargos antes de arrancar el servidor
+  try {
+    const { reconcileCargosHierarchy } = await import("./modules/cargos/reconciliation.js");
+    await reconcileCargosHierarchy();
+  } catch (err) {
+    logger.error({ err }, "Error reconciliando jerarquia al arrancar");
+  }
+
   server = app.listen(env.PORT, "0.0.0.0", () => {
     logger.info(`KPI Jefaturas listo en http://localhost:${env.PORT} (${env.NODE_ENV})`);
     if (!isProduction) logger.info("Frontend dev esperado en http://localhost:5173 con proxy /api");

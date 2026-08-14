@@ -76,11 +76,6 @@ export default function HeaderDesktop({ user }) {
 
   const selectArea = (area) => {
     setExpandedAreaId(area.id);
-    const rememberedChild = lastChildByParent[area.id];
-    if (rememberedChild && area.childIds.includes(rememberedChild) && visibleIds.has(rememberedChild)) {
-      goCargo(rememberedChild);
-      return;
-    }
     if (visibleIds.has(area.id)) {
       goCargo(area.id);
       return;

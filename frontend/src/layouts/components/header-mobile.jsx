@@ -123,11 +123,6 @@ export default function HeaderMobile({ user }) {
 
   const goArea = (area) => {
     setSelectedAreaId(area.id);
-    const rememberedChild = lastChildByParent[area.id];
-    if (rememberedChild && area.childIds.includes(rememberedChild) && byId.has(rememberedChild)) {
-      goCargo(rememberedChild, { close: false });
-      return;
-    }
     if (byId.has(area.id)) goCargo(area.id, { close: false });
   };
 

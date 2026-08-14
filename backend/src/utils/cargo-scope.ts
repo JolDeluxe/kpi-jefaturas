@@ -10,12 +10,8 @@ export const isRole = (value: string): value is Role => ROLES.includes(value as 
 
 export const getKnownParentId = (cargoId: number): number | null => {
   if (cargoId === 1) return null;
-  if (cargoId === 100 || cargoId === 200 || cargoId === 300 || cargoId === 400) return 1;
-  if (cargoId >= 101 && cargoId <= 104) return 100;
-  if (cargoId === 201) return 200;
-  if (cargoId >= 301 && cargoId <= 309) return 300;
-  if (cargoId >= 401 && cargoId <= 402) return 400;
-  return null;
+  if (cargoId % 100 === 0) return 1;
+  return Math.floor(cargoId / 100) * 100;
 };
 
 export const getDescendantCargoIds = (cargoId: number, cargos: CargoNode[]): number[] => {
