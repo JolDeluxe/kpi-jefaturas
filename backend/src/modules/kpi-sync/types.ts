@@ -22,4 +22,7 @@ export type KpiSyncRunResult = {
   status: "DISABLED" | "NO_CHANGES" | "UNSTABLE" | "IMPORTED" | "SKIPPED_DUPLICATE" | "ERROR" | "SKIPPED_RUNNING";
   message?: string;
   rowCount?: number;
+  cached?: boolean;
+  reused?: boolean;
+  cooldownMs?: number;
 };

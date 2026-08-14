@@ -9,8 +9,11 @@ import { OneDriveProvider } from "./providers/onedrive-provider.js";
 import type { KpiFileMetadata, KpiSourceProvider, KpiSyncRunResult } from "./types.js";
 
 const SYNC_STATE_ID = "kpi-sync";
+const MANUAL_SYNC_COOLDOWN_MS = 30_000;
 
 let syncRunning = false;
+let manualSyncPromise: Promise<KpiSyncRunResult> | null = null;
+let lastManualSyncResult: { completedAt: number; result: KpiSyncRunResult } | null = null;
 let scheduler: NodeJS.Timeout | null = null;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -163,6 +166,38 @@ export const runKpiSyncNow = async (provider = createConfiguredProvider()): Prom
     return { status: "ERROR", message };
   } finally {
     syncRunning = false;
+  }
+};
+
+export const runKpiSyncManual = async (
+  provider = createConfiguredProvider(),
+  options: { nowMs?: number } = {}
+): Promise<KpiSyncRunResult> => {
+  const nowMs = options.nowMs ?? Date.now();
+
+  if (manualSyncPromise) {
+    const result = await manualSyncPromise;
+    return { ...result, reused: true };
+  }
+
+  if (lastManualSyncResult && nowMs - lastManualSyncResult.completedAt < MANUAL_SYNC_COOLDOWN_MS) {
+    return {
+      ...lastManualSyncResult.result,
+      cached: true,
+      cooldownMs: MANUAL_SYNC_COOLDOWN_MS - (nowMs - lastManualSyncResult.completedAt)
+    };
+  }
+
+  manualSyncPromise = runKpiSyncNow(provider);
+  try {
+    const result = await manualSyncPromise;
+    lastManualSyncResult = {
+      completedAt: options.nowMs ?? Date.now(),
+      result
+    };
+    return result;
+  } finally {
+    manualSyncPromise = null;
   }
 };
 

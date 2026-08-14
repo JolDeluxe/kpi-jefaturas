@@ -1,8 +1,10 @@
+import { RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { cargosApi } from '@/features/cargos/api/cargos-api';
 import { dashboardApi } from '@/features/dashboard/api/dashboard-api';
 import { kpisApi } from '@/features/kpis/api/kpis-api';
+import { kpiSyncApi } from '@/features/kpis/api/kpi-sync-api';
 import { GLOBAL_CARGO_ID } from '@/features/cargos/config/cargo-nav-config.js';
 import PeriodSelector from '../components/period-selector.jsx';
 import KpiTable from '../components/kpi-table.jsx';
@@ -19,6 +21,9 @@ export default function KpiDashboardPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
   const requestedCargoId = Number(searchParams.get('cargoId')) || null;
 
   useEffect(() => {
@@ -26,16 +31,17 @@ export default function KpiDashboardPage() {
       .then(({ cargos: visibles }) => {
         setCargos(visibles);
         const visibleIds = new Set(visibles.map((cargo) => cargo.id));
-        const initialCargoId = requestedCargoId && visibleIds.has(requestedCargoId)
+        const currentCargoId = cargoId && visibleIds.has(cargoId) ? cargoId : null;
+        const initialCargoId = currentCargoId || (requestedCargoId && visibleIds.has(requestedCargoId)
           ? requestedCargoId
-          : visibles.find((cargo) => cargo.id === GLOBAL_CARGO_ID)?.id ?? visibles.find((cargo) => cargo.id === 302)?.id ?? visibles[0]?.id ?? null;
+          : visibles.find((cargo) => cargo.id === GLOBAL_CARGO_ID)?.id ?? visibles[0]?.id ?? null);
         setCargoId(initialCargoId);
         if (initialCargoId && initialCargoId !== requestedCargoId) {
           setSearchParams({ cargoId: String(initialCargoId) }, { replace: true });
         }
       })
       .catch((err) => setError(err.response?.data?.message || 'No se pudieron cargar cargos'));
-  }, []);
+  }, [reloadKey]);
 
   useEffect(() => {
     if (!cargos.length || !requestedCargoId) return;
@@ -53,7 +59,7 @@ export default function KpiDashboardPage() {
         setAnio((current) => (current && disponibles?.includes(current) ? current : disponibles?.[0] ?? null));
       })
       .catch((err) => setError(err.response?.data?.message || 'No se pudieron cargar años'));
-  }, [cargoId]);
+  }, [cargoId, reloadKey]);
 
   useEffect(() => {
     if (!cargoId || !anio) return;
@@ -73,7 +79,31 @@ export default function KpiDashboardPage() {
       })
       .catch((err) => setError(err.response?.data?.message || 'No se pudieron cargar KPIs'))
       .finally(() => setLoading(false));
-  }, [cargoId, anio, periodo]);
+  }, [cargoId, anio, periodo, reloadKey]);
+
+  const handleManualSync = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    setSyncMessage('Actualizando...');
+    try {
+      const result = await kpiSyncApi.run();
+      if (result.status === 'NO_CHANGES' || result.cached) {
+        setSyncMessage('Ya tienes los resultados mas recientes');
+      } else if (result.status === 'IMPORTED' || result.status === 'SKIPPED_DUPLICATE') {
+        setSyncMessage('Resultados actualizados');
+      } else if (result.status === 'SKIPPED_RUNNING' || result.reused) {
+        setSyncMessage('Actualizacion en curso; se reutilizo el resultado');
+      } else {
+        setSyncMessage(result.message || 'Resultados actualizados');
+      }
+      window.dispatchEvent(new Event('kpi-data-refreshed'));
+      setReloadKey((current) => current + 1);
+    } catch {
+      setSyncMessage('No se pudo actualizar. Se mantienen los ultimos resultados disponibles.');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const periodoLabel = useMemo(() => PERIODOS.find((item) => item.id === periodo)?.label || periodo, [periodo]);
   const total = resumen?.calificacionGeneralRaw?.replace(/\u2003/g, ' ').trim() || '--';
@@ -99,10 +129,17 @@ export default function KpiDashboardPage() {
           <span className="kpi-period-context">{periodoLabel} {anio || ''}</span>
           <h2>{isGlobalDashboard ? 'MBC' : resumen?.cargo?.nombre || 'KPIs'}</h2>
         </div>
-        <strong className="kpi-total-pill">
-          <span>Total</span>
-          {total}
-        </strong>
+        <div className="kpi-heading-actions">
+          <button className="kpi-sync-button glass-control" onClick={handleManualSync} disabled={syncing}>
+            <RefreshCw size={15} className={syncing ? 'spin' : ''} />
+            {syncing ? 'Actualizando...' : 'Actualizar resultados'}
+          </button>
+          {syncMessage && <small className="kpi-sync-message">{syncMessage}</small>}
+          <strong className="kpi-total-pill">
+            <span>Total</span>
+            {total}
+          </strong>
+        </div>
       </div>
 
       {error && <div className="alert-error">{error}</div>}

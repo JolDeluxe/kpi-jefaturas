@@ -5,13 +5,6 @@ export const GLOBAL_NAV_ITEM = {
   label: 'MBC'
 };
 
-export const AREAS = [
-  { id: 100, label: 'DIRECCION', childIds: [101, 102, 103, 104] },
-  { id: 200, label: 'ADMINISTRACION', childIds: [201] },
-  { id: 300, label: 'OPERACIONES', childIds: [301, 302, 303, 304, 305, 306, 307, 308, 309] },
-  { id: 400, label: 'CAPITAL HUMANO', childIds: [401, 402] }
-];
-
 export const shortCargoName = (nombre = '') => nombre
   .replace(/^GERENCIA DE\s+/i, '')
   .replace(/^GERENCIA\s+/i, '')
@@ -20,14 +13,28 @@ export const shortCargoName = (nombre = '') => nombre
   .replace(/LOGISTICA/i, 'LOGISTICA')
   .trim();
 
-export const getVisibleAreas = (cargos) => {
-  const visibleIds = new Set(cargos.map((cargo) => cargo.id));
-  return AREAS
-    .map((area) => ({
-      ...area,
-      visible: visibleIds.has(area.id) || area.childIds.some((id) => visibleIds.has(id))
+export const getVisibleAreas = (cargos = []) => {
+  const byId = new Map(cargos.map((cargo) => [cargo.id, cargo]));
+  const childrenByParent = new Map();
+
+  cargos.forEach((cargo) => {
+    if (!cargo.parentId || cargo.parentId === GLOBAL_CARGO_ID) return;
+    if (!childrenByParent.has(cargo.parentId)) childrenByParent.set(cargo.parentId, []);
+    childrenByParent.get(cargo.parentId).push(cargo.id);
+  });
+
+  return cargos
+    .filter((cargo) => {
+      if (isGlobalCargo(cargo.id)) return false;
+      if (cargo.parentId === GLOBAL_CARGO_ID || cargo.parentId == null) return true;
+      return !byId.has(cargo.parentId);
+    })
+    .map((cargo) => ({
+      id: cargo.id,
+      label: shortCargoName(cargo.nombre).toUpperCase(),
+      childIds: (childrenByParent.get(cargo.id) || []).sort((a, b) => a - b)
     }))
-    .filter((area) => area.visible);
+    .sort((a, b) => a.id - b.id);
 };
 
 export const isGlobalCargo = (cargoId) => Number(cargoId) === GLOBAL_CARGO_ID;
@@ -39,7 +46,8 @@ export const getCargoDisplayName = (cargo) => {
   return isGlobalCargo(cargo.id) ? GLOBAL_NAV_ITEM.label : shortCargoName(cargo.nombre);
 };
 
-export const getAreaForCargo = (cargoId) => {
+export const getAreaForCargo = (cargoId, cargos = []) => {
   if (isGlobalCargo(cargoId)) return null;
-  return AREAS.find((area) => area.id === cargoId || area.childIds.includes(cargoId));
+  const areas = getVisibleAreas(cargos);
+  return areas.find((area) => area.id === cargoId || area.childIds.includes(cargoId)) || null;
 };

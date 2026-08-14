@@ -258,6 +258,50 @@ describe("kpi sync", () => {
     await first;
   });
 
+  it("sync manual reutiliza resultado reciente durante cooldown", async () => {
+    const importCsv = vi.fn(async () => ({
+      duplicated: false,
+      rowCount: 4,
+      importacion: { id: "imp1", sha256: "hash", rowCount: 4 }
+    }));
+    const { service } = await loadService({ lastImportedETag: "v1" }, importCsv);
+    const firstProvider = makeProvider("v2");
+    const secondProvider = makeProvider("v3");
+
+    const first = await service.runKpiSyncManual(firstProvider, { nowMs: 1000 });
+    const second = await service.runKpiSyncManual(secondProvider, { nowMs: 2000 });
+
+    expect(first.status).toBe("IMPORTED");
+    expect(second.status).toBe("IMPORTED");
+    expect(second.cached).toBe(true);
+    expect(second.cooldownMs).toBe(29000);
+    expect(firstProvider.getMetadata).toHaveBeenCalledTimes(1);
+    expect(secondProvider.getMetadata).not.toHaveBeenCalled();
+    expect(importCsv).toHaveBeenCalledTimes(1);
+  });
+
+  it("sync manual concurrente reutiliza la misma promesa y no duplica importacion", async () => {
+    const importCsv = vi.fn(async () => ({
+      duplicated: false,
+      rowCount: 2,
+      importacion: { id: "imp1", sha256: "hash", rowCount: 2 }
+    }));
+    const { service } = await loadService({ lastImportedETag: "v1" }, importCsv);
+    const firstProvider = makeProvider("v2", { delay: 50 });
+    const secondProvider = makeProvider("v3");
+
+    const first = service.runKpiSyncManual(firstProvider, { nowMs: 1000 });
+    const second = service.runKpiSyncManual(secondProvider, { nowMs: 1001 });
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(firstResult.status).toBe("IMPORTED");
+    expect(secondResult.status).toBe("IMPORTED");
+    expect(secondResult.reused).toBe(true);
+    expect(firstProvider.getMetadata).toHaveBeenCalledTimes(1);
+    expect(secondProvider.getMetadata).not.toHaveBeenCalled();
+    expect(importCsv).toHaveBeenCalledTimes(1);
+  });
+
   it("KPI_SOURCE=local sigue creando provider local", async () => {
     const { service } = await loadService(null, vi.fn(), {
       KPI_SOURCE: "local",

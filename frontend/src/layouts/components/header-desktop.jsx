@@ -6,6 +6,7 @@ import {
   GLOBAL_CARGO_ID,
   GLOBAL_NAV_ITEM,
   getAreaForCargo,
+  isGlobalCargo,
   getVisibleAreas,
   shortCargoName
 } from '@/features/cargos/config/cargo-nav-config.js';
@@ -21,22 +22,28 @@ export default function HeaderDesktop({ user }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [cargos, setCargos] = useState([]);
   const [expandedAreaId, setExpandedAreaId] = useState(null);
+  const [lastChildByParent, setLastChildByParent] = useState({});
   const activeCargoId = Number(searchParams.get('cargoId')) || null;
-  const activeArea = getAreaForCargo(activeCargoId);
+  const activeArea = getAreaForCargo(activeCargoId, cargos);
   const visibleIds = useMemo(() => new Set(cargos.map((cargo) => cargo.id)), [cargos]);
   const isSystemAdmin = user?.role === 'ADMIN' && user?.cargoId == null;
   const canSeeGlobal = visibleIds.has(GLOBAL_CARGO_ID);
   const byId = useMemo(() => new Map(cargos.map((cargo) => [cargo.id, cargo])), [cargos]);
   const areas = useMemo(() => getVisibleAreas(cargos), [cargos]);
-  const expandedArea = areas.find((area) => area.id === (expandedAreaId || activeArea?.id)) || null;
+  const expandedArea = activeCargoId === GLOBAL_CARGO_ID
+    ? null
+    : areas.find((area) => area.id === (expandedAreaId || activeArea?.id)) || null;
   const visibleChildren = expandedArea
     ? expandedArea.childIds.map((id) => byId.get(id)).filter(Boolean)
     : [];
 
   useEffect(() => {
-    cargosApi.visibles()
+    const loadCargos = () => cargosApi.visibles()
       .then(({ cargos: visibles }) => setCargos(visibles || []))
       .catch(() => setCargos([]));
+    loadCargos();
+    window.addEventListener('kpi-data-refreshed', loadCargos);
+    return () => window.removeEventListener('kpi-data-refreshed', loadCargos);
   }, [user?.id]);
 
   useEffect(() => {
@@ -55,11 +62,25 @@ export default function HeaderDesktop({ user }) {
   };
 
   const goCargo = (cargoId) => {
+    if (isGlobalCargo(cargoId)) {
+      setExpandedAreaId(null);
+    } else {
+      const nextArea = getAreaForCargo(cargoId, cargos);
+      if (nextArea) setExpandedAreaId(nextArea.id);
+      if (nextArea && nextArea.id !== cargoId) {
+        setLastChildByParent((current) => ({ ...current, [nextArea.id]: cargoId }));
+      }
+    }
     navigate(`/dashboard/kpis?cargoId=${cargoId}`);
   };
 
   const selectArea = (area) => {
     setExpandedAreaId(area.id);
+    const rememberedChild = lastChildByParent[area.id];
+    if (rememberedChild && area.childIds.includes(rememberedChild) && visibleIds.has(rememberedChild)) {
+      goCargo(rememberedChild);
+      return;
+    }
     if (visibleIds.has(area.id)) {
       goCargo(area.id);
       return;

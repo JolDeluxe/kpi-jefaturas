@@ -1,10 +1,11 @@
 import request from "supertest";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { app } from "../src/index.js";
 import { env } from "../src/env.js";
 import { prisma } from "../src/db/index.js";
+import * as kpiSyncService from "../src/modules/kpi-sync/service.js";
 
 const testPassword = randomUUID();
 const cargo901Username = "test.auth-cargo901";
@@ -102,5 +103,37 @@ describe("endpoints protegidos", () => {
       .set("X-Sync-Key", "incorrecta");
 
     expect(response.status).toBe(401);
+  });
+
+  it("POST /api/kpi-sync/run sin sesion regresa 401", async () => {
+    const response = await request(app).post("/api/kpi-sync/run");
+    expect(response.status).toBe(401);
+  });
+
+  it("usuario autenticado con acceso KPI puede solicitar sync manual sin secretos", async () => {
+    const spy = vi.spyOn(kpiSyncService, "runKpiSyncManual").mockResolvedValue({
+      status: "NO_CHANGES",
+      message: "Sin cambios"
+    });
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ username: cargo901Username, password: testPassword });
+
+    const response = await agent.post("/api/kpi-sync/run");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(expect.objectContaining({ status: "NO_CHANGES", message: "Sin cambios" }));
+    expect(JSON.stringify(response.body)).not.toContain("GOOGLE");
+    expect(JSON.stringify(response.body)).not.toContain("SERVICE_ACCOUNT");
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+  });
+
+  it("endpoint admin de sync sigue protegido para usuarios no admin", async () => {
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ username: cargo901Username, password: testPassword });
+
+    const response = await agent.post("/api/admin/kpi-sync/run");
+
+    expect(response.status).toBe(403);
   });
 });

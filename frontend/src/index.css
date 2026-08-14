@@ -522,6 +522,44 @@ button:disabled { cursor: not-allowed; }
   letter-spacing: .14em;
   line-height: 1;
 }
+.kpi-heading-actions {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+.kpi-sync-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  border-radius: 8px;
+  color: #482b2c;
+  padding: 7px 12px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.kpi-sync-button:disabled {
+  color: #64748b;
+  filter: saturate(.76);
+}
+.kpi-sync-button .spin {
+  animation: kpi-spin .9s linear infinite;
+}
+.kpi-sync-message {
+  max-width: 260px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: right;
+}
+@keyframes kpi-spin {
+  to { transform: rotate(360deg); }
+}
 .kpi-table-wrap {
   max-height: calc(100vh - 306px);
   overflow: auto;
@@ -1775,6 +1813,20 @@ button:disabled { cursor: not-allowed; }
     letter-spacing: .03em;
     text-align: center;
     white-space: normal;
+  }
+  .kpi-heading-actions {
+    justify-items: stretch;
+    gap: 7px;
+  }
+  .kpi-sync-button {
+    min-height: 36px;
+    padding: 7px 9px;
+    font-size: 9px;
+  }
+  .kpi-sync-message {
+    max-width: none;
+    font-size: 10px;
+    text-align: center;
   }
   .kpi-table-wrap { display: none; }
   .kpi-mobile-list { display: grid; gap: 11px; margin: 0; }

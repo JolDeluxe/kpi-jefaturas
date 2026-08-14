@@ -24,6 +24,7 @@ export default function HeaderMobile({ user }) {
   const [open, setOpen] = useState(false);
   const [departmentQuery, setDepartmentQuery] = useState('');
   const [selectedAreaId, setSelectedAreaId] = useState(null);
+  const [lastChildByParent, setLastChildByParent] = useState({});
   const [loggingOut, setLoggingOut] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [cargos, setCargos] = useState([]);
@@ -38,8 +39,10 @@ export default function HeaderMobile({ user }) {
   const activeCargo = activeCargoId ? byId.get(activeCargoId) : null;
   const activeIsGlobal = isGlobalCargo(activeCargoId);
   const canSeeGlobal = hasGlobalCargo(cargos);
-  const activeArea = activeCargoId ? getAreaForCargo(activeCargoId) : null;
-  const selectedArea = areas.find((area) => area.id === (selectedAreaId || activeArea?.id)) || areas[0] || null;
+  const activeArea = activeCargoId ? getAreaForCargo(activeCargoId, cargos) : null;
+  const selectedArea = activeIsGlobal
+    ? null
+    : areas.find((area) => area.id === (selectedAreaId || activeArea?.id)) || areas[0] || null;
   const selectedAreaLabel = selectedArea?.label || 'Area';
   const activeAreaLabel = activeIsGlobal ? GLOBAL_NAV_ITEM.label : activeArea?.label || selectedAreaLabel;
   const selectedLabel = activeCargo
@@ -53,15 +56,22 @@ export default function HeaderMobile({ user }) {
   });
 
   useEffect(() => {
-    cargosApi.visibles()
+    const loadCargos = () => cargosApi.visibles()
       .then(({ cargos: visibles }) => setCargos(visibles || []))
       .catch(() => setCargos([]));
+    loadCargos();
+    window.addEventListener('kpi-data-refreshed', loadCargos);
+    return () => window.removeEventListener('kpi-data-refreshed', loadCargos);
   }, [user?.id]);
 
   useEffect(() => {
+    if (activeIsGlobal) {
+      setSelectedAreaId(null);
+      return;
+    }
     if (!activeArea?.id) return;
     setSelectedAreaId(activeArea.id);
-  }, [activeArea?.id]);
+  }, [activeArea?.id, activeIsGlobal]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -102,14 +112,23 @@ export default function HeaderMobile({ user }) {
   };
 
   const goCargo = (cargoId, { close = true } = {}) => {
-    const nextArea = getAreaForCargo(cargoId);
-    if (nextArea) setSelectedAreaId(nextArea.id);
+    const nextArea = getAreaForCargo(cargoId, cargos);
+    setSelectedAreaId(isGlobalCargo(cargoId) ? null : nextArea?.id || null);
+    if (nextArea && nextArea.id !== cargoId) {
+      setLastChildByParent((current) => ({ ...current, [nextArea.id]: cargoId }));
+    }
     setDepartmentQuery('');
     go(`/dashboard/kpis?cargoId=${cargoId}`, { close });
   };
 
   const goArea = (area) => {
     setSelectedAreaId(area.id);
+    const rememberedChild = lastChildByParent[area.id];
+    if (rememberedChild && area.childIds.includes(rememberedChild) && byId.has(rememberedChild)) {
+      goCargo(rememberedChild, { close: false });
+      return;
+    }
+    if (byId.has(area.id)) goCargo(area.id, { close: false });
   };
 
   const handleLogout = async () => {
@@ -192,6 +211,7 @@ export default function HeaderMobile({ user }) {
             </div>
           </section>
 
+          {selectedArea && (
           <section className="mobile-nav-section departments">
             <div className="mobile-section-title">
               <span>Departamentos</span>
@@ -232,6 +252,7 @@ export default function HeaderMobile({ user }) {
                 })}
             </div>
           </section>
+          )}
         </div>
 
         {(items.length > 0) && (
