@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getKnownParentId } from "../src/utils/cargo-scope.js";
 import { prisma } from "../src/db/index.js";
 import { reconcileCargosHierarchy } from "../src/modules/cargos/reconciliation.js";
@@ -256,6 +256,170 @@ INVALID_DATA,1,702,3,JEFATURA EXPORTACION,KPI-3,100,KPI,8,10,8,4,3,Param,8,4,80%
           }
         }
       });
+    }, 15000);
+  });
+
+  describe("Active Status Reconciliation", () => {
+    // IDs usados exclusivamente en estos tests.
+    // Alejados de: 900/901 (http-auth), 910/911 (admin-users-api),
+    //              500/501/600/601/920-922 (cargo-user-provisioning).
+    const CARGO_IDS = [980, 981];
+    const KPI_ID = "KPI-RECONCILE-980";
+
+    // Snapshot de estados activo de los cargos pre-existentes (capturado antes de crear fixtures).
+    // Se restaura INMEDIATAMENTE después de cada llamada a reconcileCargosHierarchy() para
+    // eliminar la ventana de race condition con suites paralelas (e.g. http-auth usa cargo 901).
+    // Los fixtures (980, 981) se crean DESPUÉS del snapshot, por lo que no están en él,
+    // y sus estados post-reconciliación NO se sobreescriben por la restauración.
+    let cargoSnapshot: { id: number; activo: boolean }[] = [];
+
+    const restoreSnapshot = async () => {
+      if (cargoSnapshot.length > 0) {
+        await prisma.cargo.updateMany({
+          where: { id: { in: cargoSnapshot.map((s) => s.id) } },
+          data: { activo: true } // Restaurar todos a activo para no interferir
+        });
+        // Restaurar los que estaban inactivos antes del test
+        const inactivos = cargoSnapshot.filter((s) => !s.activo);
+        if (inactivos.length > 0) {
+          await prisma.cargo.updateMany({
+            where: { id: { in: inactivos.map((s) => s.id) } },
+            data: { activo: false }
+          });
+        }
+      }
+    };
+
+    beforeEach(async () => {
+      // 1. Capturar estado ANTES de crear fixtures
+      cargoSnapshot = await prisma.cargo.findMany({ select: { id: true, activo: true } });
+
+      // 2. Limpiar cualquier fixture residual
+      await prisma.kpiResultado.deleteMany({ where: { cargoId: { in: CARGO_IDS } } });
+      await prisma.usuario.deleteMany({ where: { cargoId: { in: CARGO_IDS } } });
+      await prisma.cargo.deleteMany({ where: { id: { in: CARGO_IDS } } });
+      await prisma.importacion.deleteMany({ where: { filename: "reconcile-active-test.csv" } });
+      await prisma.kpi.deleteMany({ where: { id: KPI_ID } });
+    });
+
+    afterEach(async () => {
+      // Limpiar fixtures propios (snapshot ya fue restaurado dentro de cada test)
+      await prisma.kpiResultado.deleteMany({ where: { cargoId: { in: CARGO_IDS } } });
+      await prisma.usuario.deleteMany({ where: { cargoId: { in: CARGO_IDS } } });
+      await prisma.cargo.deleteMany({ where: { id: { in: CARGO_IDS } } });
+      await prisma.importacion.deleteMany({ where: { filename: "reconcile-active-test.csv" } });
+      await prisma.kpi.deleteMany({ where: { id: KPI_ID } });
+      // Restauración de seguridad por si el test falló antes de restaurar
+      await restoreSnapshot();
+    });
+
+    it("desactiva cargo sin KPI aunque tenga usuario activo asociado; el usuario sobrevive", async () => {
+      // 1. Cargo 980 activo=true, sin KpiResultado
+      await prisma.cargo.create({
+        data: { id: 980, nombre: "GERENCIA RECONCILE TEST", activo: true, parentId: 1 }
+      });
+      // 2. Usuario activo asociado a Cargo 980 (simula auto-provisionamiento del importador)
+      const usuario = await prisma.usuario.create({
+        data: {
+          nombre: "Gerente Reconcile Test",
+          email: "gerente.reconcile@test.local",
+          username: "gerente.reconcile.test",
+          passwordHash: "dummy-hash",
+          role: "GERENTE",
+          cargoId: 980,
+          activo: true
+        }
+      });
+
+      // 3. NO se crea ningún KpiResultado para cargo 980
+
+      // 4. Ejecutar reconciliación
+      await reconcileCargosHierarchy();
+      // Restaurar snapshot inmediatamente para no afectar suites paralelas
+      await restoreSnapshot();
+
+      // 5. Cargo 980 debe quedar inactivo
+      const cargo980 = await prisma.cargo.findUnique({ where: { id: 980 } });
+      expect(cargo980?.activo).toBe(false);
+
+      // 6. El usuario debe seguir existiendo (no se borra)
+      const usuarioAfter = await prisma.usuario.findUnique({ where: { id: usuario.id } });
+      expect(usuarioAfter).not.toBeNull();
+      expect(usuarioAfter?.cargoId).toBe(980);
+
+      // 7. MBC sigue protegido
+      const mbc = await prisma.cargo.findUnique({ where: { id: 1 } });
+      expect(mbc?.activo).toBe(true);
+    });
+
+    it("reactiva cargo cuando vuelven KPI; el usuario existente se reutiliza", async () => {
+      // Setup: cargo 980 ya inactivo (estado que deja la desactivación / producción)
+      await prisma.cargo.create({
+        data: { id: 980, nombre: "GERENCIA RECONCILE TEST", activo: false, parentId: 1 }
+      });
+      const usuario = await prisma.usuario.create({
+        data: {
+          nombre: "Gerente Reconcile Test",
+          email: "gerente.reconcile@test.local",
+          username: "gerente.reconcile.test",
+          passwordHash: "dummy-hash",
+          role: "GERENTE",
+          cargoId: 980,
+          activo: true
+        }
+      });
+
+      // KPI vuelve a existir para cargo 980
+      const importacion = await prisma.importacion.create({
+        data: { filename: "reconcile-active-test.csv", sha256: "sha-reactivate-980", status: "SUCCESS" }
+      });
+      await prisma.kpi.create({ data: { id: KPI_ID, nombre: "KPI Reconcile 980", activo: true } });
+      await prisma.kpiResultado.create({
+        data: {
+          importacionId: importacion.id,
+          anio: 2026,
+          periodo: 1,
+          cargoId: 980,
+          kpiId: KPI_ID,
+          orden: 1,
+          resultadoRaw: "95%"
+        }
+      });
+
+      // Reconciliar
+      await reconcileCargosHierarchy();
+      // Restaurar snapshot inmediatamente para no afectar suites paralelas
+      await restoreSnapshot();
+
+      // Cargo 980 debe quedar activo=true
+      const cargo980 = await prisma.cargo.findUnique({ where: { id: 980 } });
+      expect(cargo980?.activo).toBe(true);
+
+      // El usuario sigue siendo el mismo
+      const usuarioAfter = await prisma.usuario.findUnique({ where: { id: usuario.id } });
+      expect(usuarioAfter).not.toBeNull();
+      expect(usuarioAfter?.cargoId).toBe(980);
+    });
+
+    it("idempotencia: doble reconciliacion produce el mismo resultado", async () => {
+      await prisma.cargo.create({
+        data: { id: 980, nombre: "GERENCIA RECONCILE TEST", activo: true, parentId: 1 }
+      });
+      // Sin KpiResultado
+
+      await reconcileCargosHierarchy();
+      // Restaurar snapshot intermedio para minimizar ventana de race condition
+      await restoreSnapshot();
+
+      await reconcileCargosHierarchy();
+      // Restaurar snapshot final
+      await restoreSnapshot();
+
+      const cargo980 = await prisma.cargo.findUnique({ where: { id: 980 } });
+      expect(cargo980?.activo).toBe(false);
+
+      const mbc = await prisma.cargo.findUnique({ where: { id: 1 } });
+      expect(mbc?.activo).toBe(true);
     });
   });
 });

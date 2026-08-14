@@ -12,8 +12,8 @@
     "prisma:migrate": "tsx scripts/setup-sqlite.ts && prisma generate",
     "prisma:seed": "tsx prisma/seed.ts",
     "import:csv": "tsx scripts/import-initial-csv.ts",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "vitest run --fileParallelism=false",
+    "test:watch": "vitest --fileParallelism=false"
   },
   "dependencies": {
     "@prisma/client": "^6.13.0",
