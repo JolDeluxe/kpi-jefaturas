@@ -4,6 +4,7 @@ import { env } from "../../env.js";
 import { importKpiCsv, type ImportCsvInput } from "../importaciones/service.js";
 import { logger } from "../../utils/logger.js";
 import { LocalFileProvider } from "./providers/local-file-provider.js";
+import { GoogleDriveProvider } from "./providers/google-drive-provider.js";
 import { OneDriveProvider } from "./providers/onedrive-provider.js";
 import type { KpiFileMetadata, KpiSourceProvider, KpiSyncRunResult } from "./types.js";
 
@@ -27,6 +28,12 @@ export const createConfiguredProvider = (): KpiSourceProvider | null => {
       itemId: env.ONEDRIVE_ITEM_ID,
       userId: env.ONEDRIVE_USER_ID,
       filePath: env.ONEDRIVE_FILE_PATH
+    });
+  }
+  if (env.KPI_SOURCE === "googledrive") {
+    return new GoogleDriveProvider({
+      fileId: env.GOOGLE_DRIVE_FILE_ID,
+      serviceAccountJsonB64: env.GOOGLE_SERVICE_ACCOUNT_JSON_B64
     });
   }
   return null;

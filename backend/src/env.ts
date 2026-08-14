@@ -20,7 +20,7 @@ const envSchema = z.object({
   FRONTEND_DEV_ORIGIN: z.string().default("http://localhost:5173"),
   SYNC_API_KEY: z.string().min(1),
   CREDENTIALS_ENCRYPTION_KEY: z.string().optional(),
-  KPI_SOURCE: z.enum(["disabled", "local", "onedrive"]).default("disabled"),
+  KPI_SOURCE: z.enum(["disabled", "local", "onedrive", "googledrive"]).default("disabled"),
   KPI_LOCAL_FILE_PATH: z.string().optional(),
   KPI_SYNC_INTERVAL_MS: z.coerce.number().int().positive().default(1800000),
   KPI_SYNC_STABILITY_DELAY_MS: z.coerce.number().int().nonnegative().default(5000),
@@ -32,7 +32,9 @@ const envSchema = z.object({
   ONEDRIVE_DRIVE_ID: z.string().optional(),
   ONEDRIVE_ITEM_ID: z.string().optional(),
   ONEDRIVE_USER_ID: z.string().optional(),
-  ONEDRIVE_FILE_PATH: z.string().optional()
+  ONEDRIVE_FILE_PATH: z.string().optional(),
+  GOOGLE_DRIVE_FILE_ID: z.string().optional(),
+  GOOGLE_SERVICE_ACCOUNT_JSON_B64: z.string().optional()
 });
 
 export const env = envSchema.parse(process.env);

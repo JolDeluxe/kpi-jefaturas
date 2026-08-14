@@ -11,7 +11,7 @@ export type KpiFilePayload = {
 };
 
 export type KpiSourceProvider = {
-  source: "local" | "onedrive";
+  source: "local" | "onedrive" | "googledrive";
   isConfigured(): boolean;
   getConfigurationWarning(): string | null;
   getMetadata(): Promise<KpiFileMetadata>;
