@@ -614,16 +614,14 @@ button:disabled { cursor: not-allowed; }
   background: #f8fafc;
 }
 .kpi-table tr.critical td {
-  background:
-    linear-gradient(90deg, rgb(255 248 219 / .84) 0%, rgb(255 251 235 / .58) 42%, rgb(255 255 255 / .96) 100%);
+  background: rgb(255 248 219 / .84);
   border-bottom-color: rgb(217 166 51 / .24);
 }
 .kpi-table tr.critical td:first-child {
   box-shadow: inset 3px 0 0 rgb(217 166 51 / .42);
 }
 .kpi-table tr.critical:hover td {
-  background:
-    linear-gradient(90deg, rgb(255 244 196 / .90) 0%, rgb(255 249 225 / .66) 42%, rgb(248 250 252 / .98) 100%);
+  background: rgb(255 248 219 / .84);
 }
 .kpi-table tr.no-data td,
 .kpi-table tr.no-data .kpi-name,
