@@ -111,25 +111,27 @@ export default function HeaderDesktop({ user }) {
         </div>
         {profileOpen && <AccountModal user={user} onClose={() => setProfileOpen(false)} />}
       </div>
-      <div className="nav-area-row" aria-label="Navegacion por gerencias">
-        {canSeeGlobal && (
-          <button
-            className={`nav-global-link ${activeCargoId === GLOBAL_CARGO_ID ? 'active' : ''}`}
-            onClick={() => goCargo(GLOBAL_CARGO_ID)}
-          >
-            {GLOBAL_NAV_ITEM.label}
-          </button>
-        )}
-        {areas.map((area) => (
-          <button
-            key={area.id}
-            className={activeArea?.id === area.id ? 'active' : ''}
-            onClick={() => selectArea(area)}
-          >
-            {area.label}
-          </button>
-        ))}
-      </div>
+      {areas.length > 0 && (
+        <div className="nav-area-row" aria-label="Navegacion por gerencias">
+          {canSeeGlobal && (
+            <button
+              className={`nav-global-link ${activeCargoId === GLOBAL_CARGO_ID ? 'active' : ''}`}
+              onClick={() => goCargo(GLOBAL_CARGO_ID)}
+            >
+              {GLOBAL_NAV_ITEM.label}
+            </button>
+          )}
+          {areas.map((area) => (
+            <button
+              key={area.id}
+              className={activeArea?.id === area.id ? 'active' : ''}
+              onClick={() => selectArea(area)}
+            >
+              {area.label}
+            </button>
+          ))}
+        </div>
+      )}
       {visibleChildren.length > 0 && (
         <div className={`nav-submodule-row ${visibleChildren.length <= 4 ? 'compact' : ''}`} aria-label="Departamentos">
           {visibleChildren.map((cargo) => (

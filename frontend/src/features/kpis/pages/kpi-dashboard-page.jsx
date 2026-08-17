@@ -1,5 +1,5 @@
 import { RefreshCw } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { cargosApi } from '@/features/cargos/api/cargos-api';
 import { dashboardApi } from '@/features/dashboard/api/dashboard-api';
@@ -10,6 +10,100 @@ import PeriodSelector from '../components/period-selector.jsx';
 import KpiTable from '../components/kpi-table.jsx';
 import { PERIODOS } from '@/config/periodos';
 
+// ─── Skeleton primitives ─────────────────────────────────────────────────────
+function SkeletonBlock({ width = '100%', height = '16px', radius = '4px', style = {} }) {
+  return (
+    <div
+      className="skeleton-block"
+      style={{ width, height, borderRadius: radius, ...style }}
+      aria-hidden="true"
+    />
+  );
+}
+
+function KpiTableSkeleton({ rows = 8 }) {
+  return (
+    <div className="kpi-table-wrap kpi-table-skeleton" aria-busy="true" aria-label="Cargando tabla KPI">
+      <table className="kpi-table">
+        <thead>
+          <tr>
+            <th>vK</th>
+            <th>KPI ( FACTORES / INICIATIVAS DE EXITO )</th>
+            <th>RESULTADO</th>
+            <th>OBJETIVO</th>
+            <th>VALOR REAL</th>
+            <th>CALIFICACION</th>
+            <th>TENDENCIA</th>
+            <th>PARAMETROS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: rows }).map((_, i) => (
+            <tr key={i}>
+              <td className="center weight"><SkeletonBlock width="32px" height="14px" style={{ margin: '0 auto' }} /></td>
+              <td><SkeletonBlock width={`${60 + (i % 3) * 18}%`} height="14px" /></td>
+              <td className="center"><SkeletonBlock width="60px" height="14px" style={{ margin: '0 auto' }} /></td>
+              <td className="center"><SkeletonBlock width="60px" height="14px" style={{ margin: '0 auto' }} /></td>
+              <td className="center"><SkeletonBlock width="70px" height="22px" style={{ margin: '0 auto' }} /></td>
+              <td className="center"><SkeletonBlock width="52px" height="30px" style={{ margin: '0 auto' }} /></td>
+              <td className="center"><SkeletonBlock width="32px" height="32px" radius="999px" style={{ margin: '0 auto' }} /></td>
+              <td><SkeletonBlock width="80%" height="14px" /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function KpiMobileSkeleton({ rows = 5 }) {
+  return (
+    <section className="kpi-mobile-list" aria-busy="true" aria-label="Cargando KPIs">
+      {Array.from({ length: rows }).map((_, i) => (
+        <article key={i} className="kpi-mobile-row glass-card skeleton-card">
+          <header className="kpi-mobile-card-head">
+            <SkeletonBlock width="32px" height="22px" radius="999px" />
+            <SkeletonBlock width={`${50 + (i % 3) * 15}%`} height="16px" />
+            <SkeletonBlock width="32px" height="32px" radius="999px" />
+          </header>
+          <div className="kpi-mobile-metric-band">
+            <SkeletonBlock width="100%" height="44px" radius="8px" />
+            <SkeletonBlock width="100%" height="44px" radius="8px" />
+            <SkeletonBlock width="100%" height="44px" radius="8px" />
+          </div>
+        </article>
+      ))}
+    </section>
+  );
+}
+
+function KpiHeadingSkeleton() {
+  return (
+    <div className="kpi-heading glass-panel" aria-busy="true">
+      <div>
+        <SkeletonBlock width="120px" height="11px" style={{ marginBottom: '8px' }} />
+        <SkeletonBlock width="220px" height="34px" />
+      </div>
+      <div className="kpi-heading-actions">
+        <SkeletonBlock width="160px" height="34px" radius="8px" />
+        <SkeletonBlock width="120px" height="38px" radius="8px" />
+      </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="kpi-empty-state">
+      <div className="kpi-empty-icon" aria-hidden="true">📋</div>
+      <strong>Sin datos disponibles</strong>
+      <p>No existen KPI para el período seleccionado.</p>
+    </div>
+  );
+}
+
+const MOBILE_MEDIA_QUERY = '(max-width: 1023px)';
+
 export default function KpiDashboardPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [cargos, setCargos] = useState([]);
@@ -19,30 +113,59 @@ export default function KpiDashboardPage() {
   const [periodo, setPeriodo] = useState(null);
   const [resumen, setResumen] = useState(null);
   const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // initialLoading = true only on first mount (skeleton full page)
+  const [initialLoading, setInitialLoading] = useState(true);
+  // refreshing = true when data already visible but we're re-fetching (soft overlay)
+  const [refreshing, setRefreshing] = useState(false);
+  const [cargosLoading, setCargosLoading] = useState(true);
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia(MOBILE_MEDIA_QUERY).matches);
   const requestedCargoId = Number(searchParams.get('cargoId')) || null;
+  // Track whether we've ever successfully loaded KPI data
+  const hasDataRef = useRef(false);
 
   useEffect(() => {
+    const mq = window.matchMedia(MOBILE_MEDIA_QUERY);
+    const update = () => setIsMobile(mq.matches);
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
+  // ── Load visible cargos ────────────────────────────────────────────────────
+  useEffect(() => {
+    setCargosLoading(true);
     cargosApi.visibles()
       .then(({ cargos: visibles }) => {
-        setCargos(visibles);
-        const visibleIds = new Set(visibles.map((cargo) => cargo.id));
+        const list = visibles || [];
+        setCargos(list);
+        const visibleIds = new Set(list.map((cargo) => cargo.id));
         const currentCargoId = cargoId && visibleIds.has(cargoId) ? cargoId : null;
-        const initialCargoId = currentCargoId || (requestedCargoId && visibleIds.has(requestedCargoId)
-          ? requestedCargoId
-          : visibles.find((cargo) => cargo.id === GLOBAL_CARGO_ID)?.id ?? visibles[0]?.id ?? null);
+        const initialCargoId = currentCargoId
+          || (requestedCargoId && visibleIds.has(requestedCargoId)
+            ? requestedCargoId
+            : list.find((cargo) => cargo.id === GLOBAL_CARGO_ID)?.id ?? list[0]?.id ?? null);
         setCargoId(initialCargoId);
         if (initialCargoId && initialCargoId !== requestedCargoId) {
           setSearchParams({ cargoId: String(initialCargoId) }, { replace: true });
         }
+        // If no cargos, stop all loading immediately
+        if (!list.length) {
+          setInitialLoading(false);
+          setRefreshing(false);
+        }
       })
-      .catch((err) => setError(err.response?.data?.message || 'No se pudieron cargar cargos'));
-  }, [reloadKey]);
+      .catch((err) => {
+        setError(err.response?.data?.message || 'No se pudieron cargar cargos');
+        setInitialLoading(false);
+        setRefreshing(false);
+      })
+      .finally(() => setCargosLoading(false));
+  }, [reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Sync requestedCargoId → cargoId when user navigates via header ─────────
   useEffect(() => {
     if (!cargos.length || !requestedCargoId) return;
     const visibleIds = new Set(cargos.map((cargo) => cargo.id));
@@ -51,19 +174,38 @@ export default function KpiDashboardPage() {
     }
   }, [requestedCargoId, cargos, cargoId]);
 
+  // ── Load available years for current cargo ─────────────────────────────────
   useEffect(() => {
     if (!cargoId) return;
     kpisApi.anios({ cargoId })
       .then(({ anios: disponibles }) => {
-        setAnios(disponibles || []);
-        setAnio((current) => (current && disponibles?.includes(current) ? current : disponibles?.[0] ?? null));
+        const list = disponibles || [];
+        setAnios(list);
+        setAnio((current) => (current && list.includes(current) ? current : list[0] ?? null));
+        // If no years, stop loading
+        if (!list.length) {
+          setInitialLoading(false);
+          setRefreshing(false);
+        }
       })
-      .catch((err) => setError(err.response?.data?.message || 'No se pudieron cargar años'));
+      .catch((err) => {
+        setError(err.response?.data?.message || 'No se pudieron cargar años');
+        setInitialLoading(false);
+        setRefreshing(false);
+      });
   }, [cargoId, reloadKey]);
 
+  // ── Load KPI data ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!cargoId || !anio) return;
-    setLoading(true);
+
+    // Decide: first time load (skeleton) or soft refresh (overlay)
+    if (hasDataRef.current) {
+      setRefreshing(true);
+    } else {
+      setInitialLoading(true);
+    }
+
     Promise.all([
       dashboardApi.resumen({ cargoId, anio, periodo: periodo || 1 }),
       kpisApi.list({ cargoId, anio, periodo: periodo || 1 })
@@ -76,10 +218,14 @@ export default function KpiDashboardPage() {
         setRows(nextPeriodo === requestedPeriodo ? (kpisData.rows || []) : []);
         if (nextPeriodo && nextPeriodo !== periodo) setPeriodo(nextPeriodo);
         setError('');
+        hasDataRef.current = true;
       })
       .catch((err) => setError(err.response?.data?.message || 'No se pudieron cargar KPIs'))
-      .finally(() => setLoading(false));
-  }, [cargoId, anio, periodo, reloadKey]);
+      .finally(() => {
+        setInitialLoading(false);
+        setRefreshing(false);
+      });
+  }, [cargoId, anio, periodo, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleManualSync = async () => {
     if (syncing) return;
@@ -108,8 +254,39 @@ export default function KpiDashboardPage() {
   const periodoLabel = useMemo(() => PERIODOS.find((item) => item.id === periodo)?.label || periodo, [periodo]);
   const total = resumen?.calificacionGeneralRaw?.replace(/\u2003/g, ' ').trim() || '--';
   const isGlobalDashboard = resumen?.cargo?.id === GLOBAL_CARGO_ID;
+  const cargoNombre = isGlobalDashboard ? 'MBC' : resumen?.cargo?.nombre || '';
+
+  // ── Full page skeleton (first load before any data) ────────────────────────
+  if (initialLoading || cargosLoading) {
+    return (
+      <section className="dashboard-page" aria-busy="true" aria-label="Cargando dashboard">
+        <div className="control-panel glass-panel skeleton-panel">
+          <SkeletonBlock width="118px" height="34px" radius="6px" />
+          <SkeletonBlock width="100%" height="34px" radius="6px" />
+        </div>
+        <KpiHeadingSkeleton />
+        {isMobile ? <KpiMobileSkeleton rows={5} /> : <KpiTableSkeleton rows={8} />}
+        <div className="summary-footer skeleton-footer">
+          <SkeletonBlock width="80px" height="22px" style={{ margin: '0 auto' }} />
+          <SkeletonBlock width="60px" height="14px" style={{ margin: '0 auto' }} />
+          <SkeletonBlock width="80px" height="22px" style={{ margin: '0 auto' }} />
+        </div>
+      </section>
+    );
+  }
+
+  // ── No cargo available (MBC root or similar) ───────────────────────────────
+  if (!cargoId && !cargosLoading) {
+    return (
+      <section className="dashboard-page">
+        {error && <div className="alert-error">{error}</div>}
+        <EmptyState />
+      </section>
+    );
+  }
+
   return (
-    <section className="dashboard-page">
+    <section className={`dashboard-page ${refreshing ? 'is-refreshing' : ''}`}>
       <div className="control-panel glass-panel">
         <label className="year-select glass-control">
           <span>Año</span>
@@ -127,7 +304,7 @@ export default function KpiDashboardPage() {
       <div className="kpi-heading glass-panel">
         <div>
           <span className="kpi-period-context">{periodoLabel} {anio || ''}</span>
-          <h2>{isGlobalDashboard ? 'MBC' : resumen?.cargo?.nombre || 'KPIs'}</h2>
+          <h2>{cargoNombre || 'KPIs'}</h2>
         </div>
         <div className="kpi-heading-actions">
           <button className="kpi-sync-button glass-control" onClick={handleManualSync} disabled={syncing}>
@@ -135,20 +312,40 @@ export default function KpiDashboardPage() {
             {syncing ? 'Actualizando...' : 'Actualizar resultados'}
           </button>
           {syncMessage && <small className="kpi-sync-message">{syncMessage}</small>}
-          <strong className="kpi-total-pill">
-            <span>Total</span>
-            {total}
-          </strong>
+          {(rows.length > 0 || refreshing) && (
+            <strong className="kpi-total-pill">
+              <span>Total</span>
+              {refreshing ? <span className="kpi-total-refreshing">···</span> : total}
+            </strong>
+          )}
         </div>
       </div>
 
-      {error && <div className="alert-error">{error}</div>}
-      {loading ? <div className="content-loader">Cargando KPIs...</div> : <KpiTable rows={rows} />}
-      <div className="summary-footer">
-        <span>{resumen?.sumaValorRaw || '--'}</span>
-        <strong>TOTAL</strong>
-        <span>{resumen?.sumaCalificacionRaw || '--'}</span>
-      </div>
+      {error && <div className="alert-error" style={{ margin: '12px 14px 0' }}>{error}</div>}
+
+      {/* Soft refresh indicator */}
+      {refreshing && (
+        <div className="kpi-refresh-banner" role="status" aria-live="polite">
+          <RefreshCw size={13} className="spin" />
+          Actualizando...
+        </div>
+      )}
+
+      {/* Table / skeleton / empty */}
+      {refreshing
+        ? (isMobile ? <KpiMobileSkeleton rows={Math.max(rows.length, 5)} /> : <KpiTableSkeleton rows={Math.max(rows.length, 8)} />)
+        : rows.length > 0
+          ? <KpiTable rows={rows} />
+          : !error && <EmptyState />
+      }
+
+      {(rows.length > 0 || refreshing) && (
+        <div className="summary-footer">
+          <span>{resumen?.sumaValorRaw || '--'}</span>
+          <strong>TOTAL</strong>
+          <span>{resumen?.sumaCalificacionRaw || '--'}</span>
+        </div>
+      )}
     </section>
   );
 }
