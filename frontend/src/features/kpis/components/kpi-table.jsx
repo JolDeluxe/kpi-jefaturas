@@ -106,6 +106,7 @@ function KpiMobileRows({ rows }) {
         const resultado = inlineValue(row.resultadoRaw);
         const objetivo = inlineValue(row.objetivoRaw);
         const valorReal = inlineValue(row.valorRealRaw);
+        const calificacion = inlineValue(row.calificacionRaw);
         const parametros = inlineValue(row.parametrosRaw);
         const parametrosMultiline = dash(row.parametrosRaw);
         return (
@@ -127,6 +128,10 @@ function KpiMobileRows({ rows }) {
               <div className={`kpi-mobile-metric glass-control ${valorReal ? '' : 'empty'} ${metricSizeClass(valorReal)}`.trim()}>
                 <span>Valor real</span>
                 <strong className={`value-real ${realTone}`}>{valorReal}</strong>
+              </div>
+              <div className={`kpi-mobile-metric score glass-control ${calificacion ? '' : 'empty'} ${metricSizeClass(calificacion)}`.trim()}>
+                <span>Calificacion</span>
+                <strong>{calificacion}</strong>
               </div>
               <div className={`kpi-mobile-metric params glass-control ${parametros ? '' : 'empty'} ${metricSizeClass(parametros)}`.trim()}>
                 <span>Parametros</span>

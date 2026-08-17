@@ -2093,6 +2093,9 @@ button:disabled { cursor: not-allowed; }
     gap: clamp(7px, 2.4vw, 11px);
     background: transparent;
   }
+  .kpi-mobile-metric.params {
+    grid-column: 1 / -1;
+  }
   .kpi-mobile-metric {
     min-width: 0;
     display: grid;
@@ -2588,6 +2591,9 @@ button:disabled { cursor: not-allowed; }
   .kpi-mobile-metric-band {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+  }
+  .kpi-mobile-metric.params {
+    grid-column: 1 / -1;
   }
   .kpi-mobile-metric {
     min-height: 74px;
