@@ -13,7 +13,7 @@ const periodGroupClass = (periodoId) => {
   return 'semester';
 };
 
-const months = PERIODOS.filter((periodo) => periodo.id <= 12 || periodo.id === 19);
+const months = PERIODOS.filter((periodo) => periodo.id <= 12);
 const quarters = PERIODOS.filter((periodo) => periodo.id >= 13 && periodo.id <= 16);
 const semesters = PERIODOS.filter((periodo) => periodo.id >= 17 && periodo.id <= 18);
 
@@ -66,9 +66,18 @@ export default function PeriodSelector({ selected, available, onChange }) {
         })}
       </div>
       <div className="period-selectors-mobile" aria-label="Selector de periodo mobile">
-        <PeriodSelect label="Mes" selected={selected} availableSet={availableSet} options={months} onChange={onChange} />
-        <PeriodSelect label="Trim." selected={selected} availableSet={availableSet} options={quarters} onChange={onChange} />
-        <PeriodSelect label="Sem." selected={selected} availableSet={availableSet} options={semesters} onChange={onChange} />
+        <div className="period-selectors-grid">
+          <PeriodSelect label="Mes" selected={selected} availableSet={availableSet} options={months} onChange={onChange} />
+          <PeriodSelect label="Trim." selected={selected} availableSet={availableSet} options={quarters} onChange={onChange} />
+          <PeriodSelect label="Sem." selected={selected} availableSet={availableSet} options={semesters} onChange={onChange} />
+        </div>
+        <button
+          className={`period-accumulated-mobile glass-control ${selected === 19 ? 'active' : ''}`.trim()}
+          disabled={!availableSet.has(19)}
+          onClick={() => onChange(19)}
+        >
+          ACUMULADO
+        </button>
       </div>
     </>
   );
