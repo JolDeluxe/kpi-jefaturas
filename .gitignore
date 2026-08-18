@@ -16,3 +16,5 @@ data/
 *.db-shm
 backend/prisma/dev.db
 backend/prisma/dev.db-journal
+# Datos confidenciales
+*.csv
