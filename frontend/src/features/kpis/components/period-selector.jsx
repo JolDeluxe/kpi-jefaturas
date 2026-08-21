@@ -47,20 +47,35 @@ function PeriodSelect({ label, selected, availableSet, options, onChange }) {
 
 export default function PeriodSelector({ selected, available, onChange }) {
   const availableSet = new Set(available);
+  const latestMonth = months
+    .filter((periodo) => availableSet.has(periodo.id))
+    .at(-1);
+  const accumulatedHint = latestMonth ? `Hasta ${latestMonth.label}` : 'Hasta ultimo registro';
+  const handleAccumulatedClick = () => {
+    if (selected === 19 && latestMonth) {
+      onChange(latestMonth.id);
+      return;
+    }
+    onChange(19);
+  };
+
   return (
     <>
       <div className="period-strip" aria-label="Selector de periodo">
         {PERIODOS.map((periodo) => {
           const enabled = availableSet.has(periodo.id);
+          const isAccumulated = periodo.id === 19;
           return (
             <button
               key={periodo.id}
               className={`period-${periodo.id} period-${periodGroupClass(periodo.id)} ${selected === periodo.id ? 'active' : ''}`.trim()}
               disabled={!enabled}
-              onClick={() => onChange(periodo.id)}
+              onClick={() => (isAccumulated ? handleAccumulatedClick() : onChange(periodo.id))}
+              title={isAccumulated ? 'Acumulado hasta el ultimo registro' : undefined}
             >
               <span className="period-label-desktop">{periodo.label}</span>
               <span className="period-label-mobile">{mobileLabel(periodo)}</span>
+              {isAccumulated && <small className="period-accumulated-hint">{accumulatedHint}</small>}
             </button>
           );
         })}
@@ -74,9 +89,11 @@ export default function PeriodSelector({ selected, available, onChange }) {
         <button
           className={`period-accumulated-mobile glass-control ${selected === 19 ? 'active' : ''}`.trim()}
           disabled={!availableSet.has(19)}
-          onClick={() => onChange(19)}
+          onClick={handleAccumulatedClick}
+          title="Acumulado hasta el ultimo registro"
         >
-          ACUMULADO
+          <span>ACUMULADO</span>
+          <small>{accumulatedHint}</small>
         </button>
       </div>
     </>

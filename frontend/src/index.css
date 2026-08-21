@@ -517,6 +517,31 @@ button:disabled { cursor: not-allowed; }
   flex: 1.8 1 78px;
   margin-left: clamp(10px, 2.2vw, 44px);
 }
+.period-strip button.period-19 {
+  display: grid;
+  place-items: center;
+  gap: 1px;
+  line-height: 1;
+}
+.period-accumulated-hint {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: rgb(100 116 139 / .72);
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: .06em;
+  line-height: 1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.period-strip button.period-19.active .period-accumulated-hint {
+  color: rgb(132 103 104 / .72);
+}
+.period-strip button.period-19:disabled .period-accumulated-hint {
+  color: rgb(100 116 139 / .42);
+}
 .period-strip button.period-13 { margin-left: clamp(8px, 1.8vw, 34px); }
 .period-strip button.period-17 { margin-left: clamp(8px, 1.8vw, 34px); }
 .period-strip button:disabled {
@@ -1889,9 +1914,11 @@ button:disabled { cursor: not-allowed; }
   .period-accumulated-mobile {
     width: 100%;
     min-height: 46px;
-    display: flex;
+    display: grid;
     justify-content: center;
+    align-content: center;
     align-items: center;
+    gap: 2px;
     padding: 7px 8px;
     border-radius: 12px;
     border: 1px solid var(--glass-border-soft);
@@ -1903,10 +1930,30 @@ button:disabled { cursor: not-allowed; }
     letter-spacing: .08em;
     text-transform: uppercase;
   }
+  .period-accumulated-mobile span,
+  .period-accumulated-mobile small {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    line-height: 1;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .period-accumulated-mobile small {
+    color: rgb(100 116 139 / .68);
+    font-size: 7px;
+    font-weight: 900;
+    letter-spacing: .08em;
+  }
   .period-accumulated-mobile.active {
     color: #b87945;
     border-color: #b87945;
     background: #fff8f3;
+  }
+  .period-accumulated-mobile.active small {
+    color: rgb(132 103 104 / .72);
   }
   .period-accumulated-mobile:disabled {
     background: transparent;
@@ -1914,6 +1961,9 @@ button:disabled { cursor: not-allowed; }
     border-color: transparent;
     box-shadow: none;
     filter: saturate(.72);
+  }
+  .period-accumulated-mobile:disabled small {
+    color: rgb(100 116 139 / .42);
   }
   .period-select-field {
     min-width: 0;

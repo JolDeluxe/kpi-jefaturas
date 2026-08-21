@@ -104,6 +104,15 @@ function EmptyState() {
 
 const MOBILE_MEDIA_QUERY = '(max-width: 1023px)';
 
+const getDefaultPeriodo = (available = []) => {
+  const latestMonth = available
+    .map((periodoId) => Number(periodoId))
+    .filter((periodoId) => periodoId >= 1 && periodoId <= 12)
+    .reduce((latest, periodoId) => Math.max(latest, periodoId), 0);
+
+  return latestMonth || available[0] || null;
+};
+
 export default function KpiDashboardPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [cargos, setCargos] = useState([]);
@@ -235,16 +244,36 @@ export default function KpiDashboardPage() {
       setInitialLoading(true);
     }
 
-    Promise.all([
-      dashboardApi.resumen({ cargoId, anio, periodo: periodo || 1 }),
-      kpisApi.list({ cargoId, anio, periodo: periodo || 1 })
-    ])
-      .then(([resumenData, kpisData]) => {
+    const loadDashboard = async () => {
+      const requestedApiPeriodo = periodo || 1;
+      const initialResumenData = await dashboardApi.resumen({ cargoId, anio, periodo: requestedApiPeriodo });
+      const disponibles = initialResumenData.resumen.periodosDisponibles || [];
+      const defaultPeriodo = getDefaultPeriodo(disponibles);
+      const requestedPeriodo = periodo || defaultPeriodo;
+      const nextPeriodo = disponibles.includes(requestedPeriodo) ? requestedPeriodo : defaultPeriodo;
+
+      if (!nextPeriodo) {
+        return { resumenData: initialResumenData, kpisData: { rows: [] }, nextPeriodo: null };
+      }
+
+      const [resumenData, kpisData] = nextPeriodo === requestedApiPeriodo
+        ? [
+          initialResumenData,
+          await kpisApi.list({ cargoId, anio, periodo: nextPeriodo })
+        ]
+        : await Promise.all([
+          dashboardApi.resumen({ cargoId, anio, periodo: nextPeriodo }),
+          kpisApi.list({ cargoId, anio, periodo: nextPeriodo })
+        ]);
+
+      return { resumenData, kpisData, nextPeriodo };
+    };
+
+    loadDashboard()
+      .then(({ resumenData, kpisData, nextPeriodo }) => {
         const disponibles = resumenData.resumen.periodosDisponibles || [];
-        const requestedPeriodo = periodo || disponibles[0];
-        const nextPeriodo = disponibles.includes(requestedPeriodo) ? requestedPeriodo : disponibles[0];
         setResumen(resumenData.resumen);
-        setRows(nextPeriodo === requestedPeriodo ? (kpisData.rows || []) : []);
+        setRows(disponibles.includes(nextPeriodo) ? (kpisData.rows || []) : []);
         if (nextPeriodo && nextPeriodo !== periodo) setPeriodo(nextPeriodo);
         setError('');
         hasDataRef.current = true;
