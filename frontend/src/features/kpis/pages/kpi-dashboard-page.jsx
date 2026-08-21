@@ -1,4 +1,4 @@
-import { RefreshCw } from 'lucide-react';
+import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { cargosApi } from '@/features/cargos/api/cargos-api';
@@ -123,6 +123,7 @@ export default function KpiDashboardPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [isMobile, setIsMobile] = useState(() => window.matchMedia(MOBILE_MEDIA_QUERY).matches);
+  const [showScrollShortcut, setShowScrollShortcut] = useState(false);
   const requestedCargoId = Number(searchParams.get('cargoId')) || null;
   // Track whether we've ever successfully loaded KPI data
   const hasDataRef = useRef(false);
@@ -133,6 +134,34 @@ export default function KpiDashboardPage() {
     mq.addEventListener('change', update);
     return () => mq.removeEventListener('change', update);
   }, []);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setShowScrollShortcut(false);
+      return undefined;
+    }
+
+    let rafId = 0;
+    const update = () => {
+      window.cancelAnimationFrame(rafId);
+      rafId = window.requestAnimationFrame(() => {
+        const doc = document.documentElement;
+        const scrollTop = window.scrollY || doc.scrollTop || 0;
+        const maxScroll = Math.max(0, doc.scrollHeight - window.innerHeight);
+        const visible = maxScroll > 520 && scrollTop > 280;
+        setShowScrollShortcut((current) => (current === visible ? current : visible));
+      });
+    };
+
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, [isMobile, rows.length, refreshing, anio, periodo, cargoId]);
 
   // ── Load visible cargos ────────────────────────────────────────────────────
   useEffect(() => {
@@ -255,6 +284,22 @@ export default function KpiDashboardPage() {
   const total = resumen?.calificacionGeneralRaw?.replace(/\u2003/g, ' ').trim() || '--';
   const isGlobalDashboard = resumen?.cargo?.id === GLOBAL_CARGO_ID;
   const cargoNombre = isGlobalDashboard ? 'MBC' : resumen?.cargo?.nombre || '';
+  const hasVisibleRows = rows.length > 0 || refreshing;
+  const renderSummaryFooter = (className = '') => {
+    if (!hasVisibleRows) return null;
+    return (
+      <div className={`summary-footer ${className}`.trim()}>
+        <span>{resumen?.sumaValorRaw || '--'}</span>
+        <strong>TOTAL</strong>
+        <span>{resumen?.sumaCalificacionRaw || '--'}</span>
+      </div>
+    );
+  };
+  const handleScrollShortcut = (direction) => {
+    const doc = document.documentElement;
+    const target = direction === 'up' ? 0 : doc.scrollHeight;
+    window.scrollTo({ top: target, behavior: 'smooth' });
+  };
 
   // ── Full page skeleton (first load before any data) ────────────────────────
   if (initialLoading || cargosLoading) {
@@ -331,6 +376,8 @@ export default function KpiDashboardPage() {
         </div>
       )}
 
+      {renderSummaryFooter('summary-footer-mobile-top')}
+
       {/* Table / skeleton / empty */}
       {refreshing
         ? (isMobile ? <KpiMobileSkeleton rows={Math.max(rows.length, 5)} /> : <KpiTableSkeleton rows={Math.max(rows.length, 8)} />)
@@ -339,11 +386,26 @@ export default function KpiDashboardPage() {
           : !error && <EmptyState />
       }
 
-      {(rows.length > 0 || refreshing) && (
-        <div className="summary-footer">
-          <span>{resumen?.sumaValorRaw || '--'}</span>
-          <strong>TOTAL</strong>
-          <span>{resumen?.sumaCalificacionRaw || '--'}</span>
+      {renderSummaryFooter('summary-footer-desktop-bottom')}
+
+      {showScrollShortcut && (
+        <div className="kpi-scroll-fab-group" aria-label="Navegacion rapida">
+          <button
+            type="button"
+            className="kpi-scroll-fab"
+            onClick={() => handleScrollShortcut('up')}
+            aria-label="Volver arriba"
+          >
+            <ChevronUp size={18} />
+          </button>
+          <button
+            type="button"
+            className="kpi-scroll-fab"
+            onClick={() => handleScrollShortcut('down')}
+            aria-label="Ir hasta abajo"
+          >
+            <ChevronDown size={18} />
+          </button>
         </div>
       )}
     </section>

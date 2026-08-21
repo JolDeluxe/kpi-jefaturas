@@ -16,6 +16,15 @@ import {
 } from '@/features/cargos/config/cargo-nav-config.js';
 import { useAuthStore } from '@/stores/auth-store';
 
+const normalizeLabel = (value = '') => value
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toUpperCase();
+
+const parentAccessLabel = (area) => (
+  normalizeLabel(area?.label).includes('DIRECCION') ? area.label : 'Gerencia'
+);
+
 export default function HeaderMobile({ user }) {
   const [open, setOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
@@ -123,10 +132,16 @@ export default function HeaderMobile({ user }) {
     <div className="mobile-nav-dialog" role="dialog" aria-modal="true" aria-label="Navegacion de areas">
       <button className="drawer-backdrop" onClick={() => setOpen(false)} aria-label="Cerrar menu" />
       <div className="mobile-drawer glass-panel">
+        <div className="mobile-drawer-topline">
+          <span>Navegacion KPI</span>
+          <button className="mobile-drawer-close" onClick={() => setOpen(false)} aria-label="Cerrar menu">
+            <X size={18} />
+          </button>
+        </div>
         <div className="mobile-nav-content">
           {canSeeGlobal && (
             <button
-              className={`mobile-accordion-item ${activeIsGlobal ? 'active' : ''}`}
+              className={`mobile-accordion-item mobile-global-button ${activeIsGlobal ? 'active' : ''}`}
               onClick={() => goCargo(GLOBAL_CARGO_ID)}
             >
               <span>{GLOBAL_NAV_ITEM.label}</span>
@@ -152,7 +167,7 @@ export default function HeaderMobile({ user }) {
                         className={`mobile-accordion-child ${activeCargoId === area.id ? 'active' : ''}`}
                         onClick={() => goCargo(area.id)}
                       >
-                        <span>Vista general</span>
+                        <span>{parentAccessLabel(area)}</span>
                         {activeCargoId === area.id && <Check size={18} />}
                       </button>
                     )}
@@ -207,6 +222,64 @@ export default function HeaderMobile({ user }) {
     </div>
   ) : null;
 
+  const mobileContextMenu = contextOpen ? (
+    <div className="mobile-context-dialog" role="dialog" aria-modal="true" aria-label="Navegacion rapida de departamentos">
+      <button className="mobile-context-backdrop" onClick={() => setContextOpen(false)} aria-label="Cerrar navegacion rapida" />
+      <div className="mobile-context-dropdown glass-panel">
+        {activeIsGlobal ? (
+          <>
+            <button
+              className={`mobile-context-item ${activeIsGlobal ? 'active' : ''}`}
+              onClick={() => goCargo(GLOBAL_CARGO_ID)}
+            >
+              <span>{GLOBAL_NAV_ITEM.label}</span>
+              {activeIsGlobal && <Check size={18} />}
+            </button>
+
+            <div className="mobile-context-divider">GERENCIAS</div>
+            {areas.map(area => (
+              <button
+                key={area.id}
+                className="mobile-context-item"
+                onClick={() => goCargo(area.id)}
+              >
+                <span>{area.label}</span>
+              </button>
+            ))}
+          </>
+        ) : (
+          <>
+            <div className="mobile-context-divider">{parentAccessLabel(activeArea)?.toUpperCase()}</div>
+            {activeArea && byId.has(activeArea.id) && (
+              <button
+                className={`mobile-context-item ${activeCargoId === activeArea.id ? 'active' : ''}`}
+                onClick={() => goCargo(activeArea.id)}
+              >
+                <span>{activeAreaLabel}</span>
+                {activeCargoId === activeArea.id && <Check size={18} />}
+              </button>
+            )}
+
+            <div className="mobile-context-divider">JEFATURAS</div>
+            {cargos
+              .filter((cargo) => activeArea?.childIds.includes(cargo.id))
+              .map((cargo) => (
+                <button
+                  key={cargo.id}
+                  className={`mobile-context-item ${activeCargoId === cargo.id ? 'active' : ''}`}
+                  onClick={() => goCargo(cargo.id)}
+                >
+                  <span>{shortCargoName(cargo.nombre)}</span>
+                  {activeCargoId === cargo.id && <Check size={18} />}
+                </button>
+              ))
+            }
+          </>
+        )}
+      </div>
+    </div>
+  ) : null;
+
   return (
     <nav className="nav-mobile">
       <div className="mobile-bar">
@@ -229,65 +302,8 @@ export default function HeaderMobile({ user }) {
         <ChevronDown size={20} style={{ transform: contextOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
       </button>
 
-      {contextOpen && (
-        <div className="mobile-context-wrapper">
-          <div className="drawer-backdrop" onClick={() => setContextOpen(false)} />
-          <div className="mobile-context-dropdown glass-panel">
-            {activeIsGlobal ? (
-              <>
-                <button
-                  className={`mobile-context-item ${activeIsGlobal ? 'active' : ''}`}
-                  onClick={() => goCargo(GLOBAL_CARGO_ID)}
-                >
-                  <span>{GLOBAL_NAV_ITEM.label}</span>
-                  {activeIsGlobal && <Check size={18} />}
-                </button>
-
-                <div className="mobile-context-divider">GERENCIAS</div>
-                {areas.map(area => (
-                  <button
-                    key={area.id}
-                    className="mobile-context-item"
-                    onClick={() => goCargo(area.id)}
-                  >
-                    <span>{area.label}</span>
-                  </button>
-                ))}
-              </>
-            ) : (
-              <>
-                <div className="mobile-context-divider">VISTA GENERAL</div>
-                {activeArea && byId.has(activeArea.id) && (
-                  <button
-                    className={`mobile-context-item ${activeCargoId === activeArea.id ? 'active' : ''}`}
-                    onClick={() => goCargo(activeArea.id)}
-                  >
-                    <span>{activeAreaLabel}</span>
-                    {activeCargoId === activeArea.id && <Check size={18} />}
-                  </button>
-                )}
-
-                <div className="mobile-context-divider">JEFATURAS</div>
-                {cargos
-                  .filter((cargo) => activeArea?.childIds.includes(cargo.id))
-                  .map((cargo) => (
-                    <button
-                      key={cargo.id}
-                      className={`mobile-context-item ${activeCargoId === cargo.id ? 'active' : ''}`}
-                      onClick={() => goCargo(cargo.id)}
-                    >
-                      <span>{shortCargoName(cargo.nombre)}</span>
-                      {activeCargoId === cargo.id && <Check size={18} />}
-                    </button>
-                  ))
-                }
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
       {mobileDrawer && createPortal(mobileDrawer, document.body)}
+      {mobileContextMenu && createPortal(mobileContextMenu, document.body)}
       {profileOpen && createPortal(<AccountModal user={user} onClose={() => setProfileOpen(false)} />, document.body)}
     </nav>
   );
